@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1783799787032" clover="3.2.0">
+  <project timestamp="1783799787032" name="All files">
+    <metrics statements="147" coveredstatements="84" conditionals="62" coveredconditionals="40" methods="46" coveredmethods="26" elements="255" coveredelements="150" complexity="0" loc="147" ncloc="147" packages="2" files="6" classes="6"/>
+    <package name="lib">
+      <metrics statements="116" coveredstatements="56" conditionals="56" coveredconditionals="36" methods="32" coveredmethods="15"/>
+      <file name="debt.ts" path="/Users/epacheco/Desktop/BloomKnights_Project/frontend/src/lib/debt.ts">
+        <metrics statements="39" coveredstatements="39" conditionals="26" coveredconditionals="24" methods="10" coveredmethods="10"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="14" count="1" type="stmt"/>
+        <line num="15" count="3" type="cond" truecount="2" falsecount="1"/>
+        <line num="19" count="1" type="stmt"/>
+        <line num="20" count="3" type="stmt"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="27" count="3" type="stmt"/>
+        <line num="44" count="1" type="stmt"/>
+        <line num="50" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="51" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="53" count="3" type="stmt"/>
+        <line num="54" count="3" type="stmt"/>
+        <line num="55" count="3" type="stmt"/>
+        <line num="56" count="3" type="stmt"/>
+        <line num="58" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="59" count="11" type="stmt"/>
+        <line num="60" count="11" type="cond" truecount="4" falsecount="0"/>
+        <line num="61" count="1" type="stmt"/>
+        <line num="63" count="10" type="stmt"/>
+        <line num="64" count="10" type="stmt"/>
+        <line num="65" count="10" type="stmt"/>
+        <line num="68" count="2" type="stmt"/>
+        <line num="72" count="1" type="cond" truecount="0" falsecount="1"/>
+        <line num="73" count="1" type="stmt"/>
+        <line num="74" count="1" type="stmt"/>
+        <line num="75" count="1" type="stmt"/>
+        <line num="82" count="1" type="stmt"/>
+        <line num="83" count="1" type="stmt"/>
+        <line num="99" count="1" type="stmt"/>
+        <line num="100" count="3" type="stmt"/>
+        <line num="101" count="3" type="stmt"/>
+        <line num="102" count="3" type="stmt"/>
+        <line num="105" count="3" type="stmt"/>
+        <line num="114" count="1" type="stmt"/>
+        <line num="115" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="116" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="117" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="118" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="119" count="1" type="stmt"/>
+      </file>
+      <file name="firebase.ts" path="/Users/epacheco/Desktop/BloomKnights_Project/frontend/src/lib/firebase.ts">
+        <metrics statements="11" coveredstatements="0" conditionals="4" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="0" type="stmt"/>
+        <line num="2" count="0" type="stmt"/>
+        <line num="3" count="0" type="stmt"/>
+        <line num="4" count="0" type="stmt"/>
+        <line num="17" count="0" type="stmt"/>
+        <line num="28" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="29" count="0" type="stmt"/>
+        <line num="35" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="37" count="0" type="stmt"/>
+        <line num="38" count="0" type="stmt"/>
+        <line num="39" count="0" type="stmt"/>
+      </file>
+      <file name="firestore.ts" path="/Users/epacheco/Desktop/BloomKnights_Project/frontend/src/lib/firestore.ts">
+        <metrics statements="49" coveredstatements="0" conditionals="14" coveredconditionals="0" methods="17" coveredmethods="0"/>
+        <line num="1" count="0" type="stmt"/>
+        <line num="14" count="0" type="stmt"/>
+        <line num="30" count="0" type="stmt"/>
+        <line num="31" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="32" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="33" count="0" type="stmt"/>
+        <line num="38" count="0" type="stmt"/>
+        <line num="39" count="0" type="stmt"/>
+        <line num="40" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="41" count="0" type="stmt"/>
+        <line num="42" count="0" type="stmt"/>
+        <line num="56" count="0" type="stmt"/>
+        <line num="57" count="0" type="stmt"/>
+        <line num="73" count="0" type="stmt"/>
+        <line num="74" count="0" type="stmt"/>
+        <line num="75" count="0" type="stmt"/>
+        <line num="76" count="0" type="stmt"/>
+        <line num="79" count="0" type="stmt"/>
+        <line num="80" count="0" type="stmt"/>
+        <line num="81" count="0" type="stmt"/>
+        <line num="84" count="0" type="stmt"/>
+        <line num="88" count="0" type="stmt"/>
+        <line num="93" count="0" type="stmt"/>
+        <line num="94" count="0" type="stmt"/>
+        <line num="95" count="0" type="stmt"/>
+        <line num="96" count="0" type="stmt"/>
+        <line num="97" count="0" type="stmt"/>
+        <line num="98" count="0" type="stmt"/>
+        <line num="109" count="0" type="stmt"/>
+        <line num="112" count="0" type="stmt"/>
+        <line num="116" count="0" type="stmt"/>
+        <line num="121" count="0" type="stmt"/>
+        <line num="124" count="0" type="stmt"/>
+        <line num="125" count="0" type="stmt"/>
+        <line num="126" count="0" type="stmt"/>
+        <line num="127" count="0" type="stmt"/>
+        <line num="128" count="0" type="stmt"/>
+        <line num="140" count="0" type="stmt"/>
+        <line num="143" count="0" type="stmt"/>
+        <line num="147" count="0" type="stmt"/>
+        <line num="158" count="0" type="stmt"/>
+        <line num="173" count="0" type="stmt"/>
+        <line num="174" count="0" type="stmt"/>
+        <line num="179" count="0" type="stmt"/>
+        <line num="180" count="0" type="stmt"/>
+        <line num="183" count="0" type="stmt"/>
+        <line num="184" count="0" type="stmt"/>
+        <line num="185" count="0" type="stmt"/>
+        <line num="195" count="0" type="stmt"/>
+      </file>
+      <file name="format.ts" path="/Users/epacheco/Desktop/BloomKnights_Project/frontend/src/lib/format.ts">
+        <metrics statements="17" coveredstatements="17" conditionals="12" coveredconditionals="12" methods="5" coveredmethods="5"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="8" count="2" type="stmt"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="12" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="13" count="2" type="stmt"/>
+        <line num="17" count="1" type="stmt"/>
+        <line num="18" count="2" type="stmt"/>
+        <line num="19" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="20" count="1" type="stmt"/>
+        <line num="28" count="1" type="stmt"/>
+        <line num="29" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="3" type="stmt"/>
+        <line num="31" count="3" type="stmt"/>
+        <line num="32" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="34" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="store">
+      <metrics statements="31" coveredstatements="28" conditionals="6" coveredconditionals="4" methods="14" coveredmethods="11"/>
+      <file name="useAuthStore.ts" path="/Users/epacheco/Desktop/BloomKnights_Project/frontend/src/store/useAuthStore.ts">
+        <metrics statements="5" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="4" coveredmethods="1"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="19" count="1" type="stmt"/>
+        <line num="22" count="0" type="stmt"/>
+        <line num="23" count="0" type="stmt"/>
+        <line num="24" count="0" type="stmt"/>
+      </file>
+      <file name="useFinanceStore.ts" path="/Users/epacheco/Desktop/BloomKnights_Project/frontend/src/store/useFinanceStore.ts">
+        <metrics statements="26" coveredstatements="26" conditionals="6" coveredconditionals="4" methods="10" coveredmethods="10"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="19" count="1" type="stmt"/>
+        <line num="40" count="1" type="stmt"/>
+        <line num="49" count="2" type="stmt"/>
+        <line num="50" count="2" type="stmt"/>
+        <line num="51" count="2" type="stmt"/>
+        <line num="57" count="1" type="stmt"/>
+        <line num="59" count="1" type="stmt"/>
+        <line num="64" count="3" type="stmt"/>
+        <line num="67" count="1" type="stmt"/>
+        <line num="68" count="1" type="stmt"/>
+        <line num="72" count="2" type="stmt"/>
+        <line num="76" count="2" type="stmt"/>
+        <line num="77" count="2" type="stmt"/>
+        <line num="78" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="79" count="2" type="stmt"/>
+        <line num="83" count="2" type="stmt"/>
+        <line num="84" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="86" count="2" type="stmt"/>
+        <line num="89" count="2" type="stmt"/>
+        <line num="93" count="2" type="stmt"/>
+        <line num="94" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="95" count="1" type="stmt"/>
+        <line num="96" count="1" type="stmt"/>
+        <line num="103" count="2" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Stack, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
@@ -25,8 +25,16 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 export default function DebtDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const debt = useFinanceStore((s) => s.debts.find((d) => d.id === id));
-  const payments = useFinanceStore((s) => s.paymentsForDebt(id));
   const addPayment = useFinanceStore((s) => s.addPayment);
+  // Select the stable `payments` array and derive the per-debt slice with
+  // useMemo. Filtering *inside* the selector returns a new array each render,
+  // which Zustand's useSyncExternalStore reads as a changed snapshot → an
+  // infinite render loop.
+  const allPayments = useFinanceStore((s) => s.payments);
+  const payments = useMemo(
+    () => allPayments.filter((p) => p.debtId === id),
+    [allPayments, id]
+  );
 
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");

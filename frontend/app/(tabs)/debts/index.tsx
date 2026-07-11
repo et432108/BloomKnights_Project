@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { Link, Stack } from "expo-router";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -16,6 +16,17 @@ export default function DebtsList() {
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-gray-900">
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Link href="/debts/new" asChild>
+              <Pressable className="px-2 active:opacity-60">
+                <Text className="text-base font-semibold text-brand">+ Add</Text>
+              </Pressable>
+            </Link>
+          ),
+        }}
+      />
       <FlatList
         data={debts}
         keyExtractor={(d) => d.id}

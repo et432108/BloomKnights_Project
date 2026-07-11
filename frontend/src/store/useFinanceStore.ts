@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  addDebt as addDebtDoc,
   addPayment as addPaymentDoc,
   fetchDebts,
   fetchPayments,
@@ -28,6 +29,8 @@ interface FinanceState {
   loadAll: (userId: string) => Promise<void>;
   /** Payments for a single debt, newest first. */
   paymentsForDebt: (debtId: string) => Payment[];
+  /** Create a new debt and add it to local state. */
+  addDebt: (input: Omit<Debt, "id">) => Promise<void>;
   /** Record a payment, then optimistically advance the debt's progress. */
   addPayment: (input: PaymentInput) => Promise<void>;
   /** Assemble the snapshot passed to the AI coaching Cloud Function. */
@@ -59,6 +62,11 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
   paymentsForDebt: (debtId) =>
     get().payments.filter((p) => p.debtId === debtId),
+
+  addDebt: async (input) => {
+    const id = await addDebtDoc(input);
+    set({ debts: [...get().debts, { id, ...input }] });
+  },
 
   addPayment: async (input) => {
     const payment = await addPaymentDoc(input);

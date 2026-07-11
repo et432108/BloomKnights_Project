@@ -86,3 +86,35 @@ export function payoffForDebt(debt: Debt): PayoffEstimate {
     debt.minimumPayment
   );
 }
+
+export interface PayoffSummary {
+  totalOriginal: number;
+  totalPaid: number;
+  remaining: number;
+  /** 0..1 share of total debt paid off across all debts. */
+  ratio: number;
+}
+
+/** Aggregate debt-free progress across every debt (used by the Home hub). */
+export function payoffSummary(debts: Debt[]): PayoffSummary {
+  const totalOriginal = debts.reduce((s, d) => s + d.totalBalance, 0);
+  const totalPaid = debts.reduce(
+    (s, d) => s + Math.min(d.currentProgress, d.totalBalance),
+    0
+  );
+  return {
+    totalOriginal,
+    totalPaid,
+    remaining: Math.max(0, totalOriginal - totalPaid),
+    ratio: totalOriginal ? totalPaid / totalOriginal : 0,
+  };
+}
+
+/** Playful BloomKnights rank derived from overall debt-free progress. */
+export function knightRank(ratio: number): string {
+  if (ratio >= 1) return "Debt-Free Legend";
+  if (ratio >= 0.75) return "Paladin";
+  if (ratio >= 0.5) return "Champion";
+  if (ratio >= 0.25) return "Knight";
+  return "Squire";
+}

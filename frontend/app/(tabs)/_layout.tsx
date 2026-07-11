@@ -14,7 +14,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: "#4F46E5",
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
       {/* Debts is a nested stack (list + detail); it owns its own headers. */}
       <Tabs.Screen
         name="debts"
