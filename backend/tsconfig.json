@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "node16",
     "target": "es2021",
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "outDir": "lib",
     "rootDir": "src",
     "strict": true,
@@ -10,5 +10,6 @@
     "skipLibCheck": true,
     "sourceMap": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/__tests__/**"]
 }
