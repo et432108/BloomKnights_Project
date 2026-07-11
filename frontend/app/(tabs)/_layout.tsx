@@ -16,19 +16,18 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: "Home", headerShown: false }}
+        options={{ title: "Dashboard", headerShown: false }}
       />
-      {/* Debts is a nested stack (list + detail); it owns its own headers. */}
-      <Tabs.Screen
-        name="debts"
-        options={{ title: "Debts", headerShown: false }}
-      />
-      <Tabs.Screen name="savings" options={{ title: "Savings" }} />
-      <Tabs.Screen
-        name="expenses"
-        options={{ title: "Expenses", headerShown: false }}
-      />
+      {/* Debts, savings, and expenses are now unified into the Finance tab. */}
+      <Tabs.Screen name="finance" options={{ title: "Finance" }} />
       <Tabs.Screen name="coaching" options={{ title: "Coach" }} />
+
+      {/* Legacy screens kept as dead code for rollback safety — hidden from the
+          tab bar with href:null. Their routes stay navigable (e.g. the payoff
+          plan at /(tabs)/debts/plan, linked from the Finance screen). */}
+      <Tabs.Screen name="debts" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="savings" options={{ href: null }} />
+      <Tabs.Screen name="expenses" options={{ href: null, headerShown: false }} />
     </Tabs>
   );
 }

@@ -40,6 +40,8 @@
     "@babel/core": "^7.25.2",
     "@types/jest": "^30.0.0",
     "@types/react": "~18.3.12",
+    "eslint": "^8.57.0",
+    "eslint-config-expo": "~8.0.1",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "ts-jest": "^29.4.11",

@@ -2,13 +2,19 @@ import { create } from "zustand";
 import {
   addDebt as addDebtDoc,
   addFixedExpense as addFixedExpenseDoc,
+  addSavingsGoal as addSavingsGoalDoc,
+  deleteDebt as deleteDebtDoc,
   deleteFixedExpense as deleteFixedExpenseDoc,
+  deleteSavingsGoal as deleteSavingsGoalDoc,
   fetchBalanceSnapshots,
   fetchDebts,
   fetchFixedExpenses,
   fetchSavingsGoals,
   fetchTransactions,
+  updateDebt as updateDebtDoc,
   updateDebtProgress as updateDebtProgressDoc,
+  updateFixedExpense as updateFixedExpenseDoc,
+  updateSavingsGoal as updateSavingsGoalDoc,
   upsertBalanceSnapshot,
 } from "@/lib/firestore";
 import { currentMonthKey } from "@/lib/format";
@@ -39,6 +45,19 @@ interface FinanceState {
   recordBalanceSnapshot: (balance: number) => Promise<void>;
   /** Create a new debt and add it to local state. */
   addDebt: (input: Omit<Debt, "id">) => Promise<void>;
+  /** Patch a debt's editable fields (name, balances, rates, progress, isRequired). */
+  updateDebt: (id: string, patch: Partial<Omit<Debt, "id" | "userId">>) => Promise<void>;
+  /** Delete a debt. */
+  removeDebt: (id: string) => Promise<void>;
+  /** Create a new savings goal and add it to local state. */
+  addSavingsGoal: (input: Omit<SavingsGoal, "id">) => Promise<void>;
+  /** Patch a savings goal's editable fields. */
+  updateSavingsGoal: (
+    id: string,
+    patch: Partial<Omit<SavingsGoal, "id" | "userId">>
+  ) => Promise<void>;
+  /** Delete a savings goal. */
+  removeSavingsGoal: (id: string) => Promise<void>;
   /**
    * Apply a set of payments to debts — increment each debt's `currentProgress`
    * (capped at its balance) and persist. This is the primitive behind
@@ -47,6 +66,11 @@ interface FinanceState {
   recordPayments: (payments: { debtId: string; amount: number }[]) => Promise<void>;
   /** Record a recurring fixed expense (rent, insurance, ...) and add it to local state. */
   addFixedExpense: (input: Omit<FixedExpense, "id">) => Promise<void>;
+  /** Patch a fixed expense's name/amount. */
+  updateFixedExpense: (
+    id: string,
+    patch: Partial<Omit<FixedExpense, "id" | "userId">>
+  ) => Promise<void>;
   /** Remove a fixed expense. */
   removeFixedExpense: (expenseId: string) => Promise<void>;
   /** Assemble the snapshot passed to the AI coaching Cloud Function. */
@@ -146,6 +170,37 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     set({ debts: [...get().debts, { id, ...input }] });
   },
 
+  updateDebt: async (id, patch) => {
+    await updateDebtDoc(id, patch);
+    set({
+      debts: get().debts.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+    });
+  },
+
+  removeDebt: async (id) => {
+    await deleteDebtDoc(id);
+    set({ debts: get().debts.filter((d) => d.id !== id) });
+  },
+
+  addSavingsGoal: async (input) => {
+    const id = await addSavingsGoalDoc(input);
+    set({ savingsGoals: [...get().savingsGoals, { id, ...input }] });
+  },
+
+  updateSavingsGoal: async (id, patch) => {
+    await updateSavingsGoalDoc(id, patch);
+    set({
+      savingsGoals: get().savingsGoals.map((g) =>
+        g.id === id ? { ...g, ...patch } : g
+      ),
+    });
+  },
+
+  removeSavingsGoal: async (id) => {
+    await deleteSavingsGoalDoc(id);
+    set({ savingsGoals: get().savingsGoals.filter((g) => g.id !== id) });
+  },
+
   recordPayments: async (payments) => {
     const debts = get().debts;
     // Fold payments into new progress values, capping each at its balance so an
@@ -176,6 +231,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   addFixedExpense: async (input) => {
     const id = await addFixedExpenseDoc(input);
     set({ fixedExpenses: [...get().fixedExpenses, { id, ...input }] });
+  },
+
+  updateFixedExpense: async (id, patch) => {
+    await updateFixedExpenseDoc(id, patch);
+    set({
+      fixedExpenses: get().fixedExpenses.map((e) =>
+        e.id === id ? { ...e, ...patch } : e
+      ),
+    });
   },
 
   removeFixedExpense: async (expenseId) => {

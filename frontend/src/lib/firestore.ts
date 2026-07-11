@@ -90,6 +90,21 @@ export async function updateDebtProgress(
   await updateDoc(doc(db, "debts", debtId), { currentProgress });
 }
 
+/**
+ * Patch any subset of a debt's editable fields (inline edit on the Finance
+ * screen). `userId` is never patched — the rules pin it to the stored value.
+ */
+export async function updateDebt(
+  debtId: string,
+  patch: Partial<Omit<Debt, "id" | "userId">>
+): Promise<void> {
+  await updateDoc(doc(db, "debts", debtId), patch);
+}
+
+export async function deleteDebt(debtId: string): Promise<void> {
+  await deleteDoc(doc(db, "debts", debtId));
+}
+
 // ---- savings_goals ---------------------------------------------------------
 
 export async function fetchSavingsGoals(userId: string): Promise<SavingsGoal[]> {
@@ -116,6 +131,30 @@ export async function addSavingsGoal(
     targetDate: Timestamp.fromDate(new Date(goal.targetDate)),
   });
   return ref.id;
+}
+
+/**
+ * Patch any subset of a savings goal's editable fields. `targetDate` is stored
+ * as a Firestore Timestamp, so convert it when present.
+ */
+export async function updateSavingsGoal(
+  goalId: string,
+  patch: Partial<Omit<SavingsGoal, "id" | "userId">>
+): Promise<void> {
+  const { targetDate, ...rest } = patch;
+  // Concrete object literal (no `unknown` index) so it satisfies updateDoc's
+  // UpdateData type; targetDate is stored as a Firestore Timestamp.
+  const data = {
+    ...rest,
+    ...(targetDate !== undefined
+      ? { targetDate: Timestamp.fromDate(new Date(targetDate)) }
+      : {}),
+  };
+  await updateDoc(doc(db, "savings_goals", goalId), data);
+}
+
+export async function deleteSavingsGoal(goalId: string): Promise<void> {
+  await deleteDoc(doc(db, "savings_goals", goalId));
 }
 
 // ---- transactions ----------------------------------------------------------
@@ -172,6 +211,13 @@ export async function addFixedExpense(
 ): Promise<string> {
   const ref = await addDoc(collection(db, "fixed_expenses"), expense);
   return ref.id;
+}
+
+export async function updateFixedExpense(
+  expenseId: string,
+  patch: Partial<Omit<FixedExpense, "id" | "userId">>
+): Promise<void> {
+  await updateDoc(doc(db, "fixed_expenses", expenseId), patch);
 }
 
 export async function deleteFixedExpense(expenseId: string): Promise<void> {

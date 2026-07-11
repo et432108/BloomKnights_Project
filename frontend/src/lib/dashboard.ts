@@ -1,18 +1,25 @@
-import type { Allocations, BalanceSnapshot, SavingsGoal } from "@/types";
+import type { Allocations, BalanceSnapshot, Debt, SavingsGoal } from "@/types";
+import { remainingBalance } from "@/lib/debt";
 
 /**
  * Dashboard fund-allocation model — the 5-slice pie on the Home dashboard.
  *
- * The pie is a *planned allocation of monthly income* (not actuals):
+ * A *planned monthly outflow*:
  *   Expenses  = fixed bills (derived from fixed_expenses, not a % you set)
- *   the remaining discretionary income (income − bills) splits by the three
- *   allocation percentages:
- *     Debt      = discretionary × debt%
+ *   Debt      = your ACTUAL monthly debt repayment, driven by the debts
+ *               themselves (not just the allocation %): at least the required
+ *               minimum payments, up to the debt budget (discretionary × debt%),
+ *               never more than you still owe. This is why the debt figure
+ *               shows up whenever you have debts — even before income is set.
+ *   the discretionary remainder splits by the savings/fun percentages:
  *     Fun Money = discretionary × fun%
  *     Savings $ = discretionary × savings%, which is then split into:
  *       Emergency Fund = monthly contribution toward the EF savings goal
  *       Savings        = whatever savings dollars remain
- * Slice amounts always sum to `income`.
+ *
+ * Because Debt is debt-driven rather than a fixed % of income, the slices sum
+ * to `total` (which may differ from income): a total above income flags that
+ * required payments outstrip the budget; below income means budget to spare.
  */
 
 /** Distinct, CVD-validated slice colors (see dataviz palette validation). */
@@ -40,9 +47,13 @@ export interface DashboardAllocation {
   income: number;
   fixedBills: number;
   discretionary: number;
+  /** Actual monthly debt repayment driving the Debt slice. */
+  debtRepayment: number;
+  /** Sum of required minimum payments across all debts (the repayment floor). */
+  requiredMinimums: number;
   /** Ordered: expenses, debt, fun, emergency, savings. */
   slices: AllocationSlice[];
-  /** Sum of slice amounts — equals `income`. */
+  /** Sum of slice amounts (may differ from income — see module docs). */
   total: number;
 }
 
@@ -110,12 +121,13 @@ export function emergencyFundMonthly(
   return Math.min(monthly, Math.max(0, savingsDollars));
 }
 
-/** Build the 5-slice fund allocation from income, fixed bills, and the split. */
+/** Build the 5-slice fund allocation from income, fixed bills, debts, and the split. */
 export function computeDashboardAllocation(
   income: number,
   fixedBills: number,
   allocations: Allocations,
   savingsGoals: SavingsGoal[],
+  debts: Debt[],
   from: Date = new Date()
 ): DashboardAllocation {
   const safeIncome = Math.max(0, income);
@@ -123,14 +135,30 @@ export function computeDashboardAllocation(
   const bills = Math.min(Math.max(0, fixedBills), safeIncome);
   const discretionary = Math.max(0, safeIncome - bills);
 
-  const debtDollars = (discretionary * allocations.debtTargetPercent) / 100;
+  // Debt is driven by the actual debts, not just the allocation %.
+  const totalOwed = debts.reduce((sum, d) => sum + remainingBalance(d), 0);
+  const requiredMinimums = debts.reduce(
+    (sum, d) => sum + Math.min(d.minimumPayment, remainingBalance(d)),
+    0
+  );
+  const debtBudget = (discretionary * allocations.debtTargetPercent) / 100;
+  // At least the required minimums, up to the budget, never more than you owe.
+  const debtRepayment = Math.max(
+    Math.min(requiredMinimums, totalOwed),
+    Math.min(debtBudget, totalOwed)
+  );
+
   const funDollars = (discretionary * allocations.funMoneyPercent) / 100;
   const savingsDollars = (discretionary * allocations.savingsTargetPercent) / 100;
 
   const emergencyDollars = emergencyFundMonthly(savingsGoals, savingsDollars, from);
   const savingsRest = Math.max(0, savingsDollars - emergencyDollars);
 
-  const pct = (amt: number) => (safeIncome > 0 ? (amt / safeIncome) * 100 : 0);
+  // Percent is share of the total planned outflow (so the pie reads as a whole
+  // even when debt repayment pushes the total above or below income).
+  const total =
+    bills + debtRepayment + funDollars + emergencyDollars + savingsRest;
+  const pct = (amt: number) => (total > 0 ? (amt / total) * 100 : 0);
   const slice = (key: SliceKey, label: string, amount: number): AllocationSlice => ({
     key,
     label,
@@ -141,7 +169,7 @@ export function computeDashboardAllocation(
 
   const slices: AllocationSlice[] = [
     slice("expenses", "Expenses", bills),
-    slice("debt", "Debt", debtDollars),
+    slice("debt", "Debt", debtRepayment),
     slice("fun", "Fun Money", funDollars),
     slice("emergency", "Emergency Fund", emergencyDollars),
     slice("savings", "Savings", savingsRest),
@@ -151,7 +179,9 @@ export function computeDashboardAllocation(
     income: safeIncome,
     fixedBills: bills,
     discretionary,
+    debtRepayment,
+    requiredMinimums,
     slices,
-    total: slices.reduce((s, x) => s + x.amount, 0),
+    total,
   };
 }

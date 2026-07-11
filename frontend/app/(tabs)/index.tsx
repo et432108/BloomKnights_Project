@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
   Alert,
@@ -43,10 +44,11 @@ export default function Dashboard() {
             income,
             fixedTotal,
             profile.allocations,
-            savingsGoals
+            savingsGoals,
+            debts
           )
         : null,
-    [profile, income, fixedTotal, savingsGoals]
+    [profile, income, fixedTotal, savingsGoals, debts]
   );
 
   const journey = useMemo(() => payoffSummary(debts), [debts]);
@@ -101,6 +103,12 @@ export default function Dashboard() {
             Dashboard
           </Text>
           <View className="flex-row items-center gap-2">
+            <Link href="/(tabs)/debts/plan" asChild>
+              <Pressable className="flex-row items-center gap-1 rounded-full border border-primary px-3 py-1.5 active:opacity-70">
+                <MaterialIcons name="insights" size={18} color="#0d631b" />
+                <Text className="text-sm font-bold text-primary">Payoff plan</Text>
+              </Pressable>
+            </Link>
             <Pressable
               onPress={openNotifications}
               className="relative rounded-full p-2 active:bg-surface-container"

@@ -5,7 +5,7 @@ import {
   isEmergencyFund,
   monthsUntil,
 } from "@/lib/dashboard";
-import type { Allocations, BalanceSnapshot, SavingsGoal } from "@/types";
+import type { Allocations, BalanceSnapshot, Debt, SavingsGoal } from "@/types";
 
 const NOW = new Date("2026-07-11T00:00:00.000Z");
 
@@ -17,6 +17,19 @@ function goal(over: Partial<SavingsGoal> = {}): SavingsGoal {
     targetAmount: 6000,
     currentAmount: 0,
     targetDate: "2027-01-11T00:00:00.000Z", // 6 months out from NOW
+    ...over,
+  };
+}
+
+function debt(over: Partial<Debt> = {}): Debt {
+  return {
+    id: "d1",
+    userId: "u1",
+    name: "Visa",
+    totalBalance: 10000,
+    interestRate: 20,
+    minimumPayment: 100,
+    currentProgress: 0,
     ...over,
   };
 }
@@ -56,11 +69,11 @@ describe("emergencyFundMonthly", () => {
 });
 
 describe("computeDashboardAllocation", () => {
-  it("splits income into 5 slices that sum to income, carving EF from savings", () => {
-    // income 5000, bills 1000 => discretionary 4000.
-    // debt 50% = 2000, fun 10% = 400, savings 40% = 1600.
-    // EF: 6000/6 = 1000, capped at savings 1600 => 1000; savings rest = 600.
-    const d = computeDashboardAllocation(5000, 1000, split, [goal()], NOW);
+  it("uses the debt budget when it exceeds the required minimums", () => {
+    // income 5000, bills 1000 => discretionary 4000. debt budget = 50% = 2000.
+    // Debt has a $100 minimum but a $10k balance, so the $2000 budget applies.
+    // fun 10% = 400; savings 40% = 1600; EF 6000/6 = 1000; savings rest = 600.
+    const d = computeDashboardAllocation(5000, 1000, split, [goal()], [debt()], NOW);
     const by = Object.fromEntries(d.slices.map((s) => [s.key, s.amount]));
 
     expect(by.expenses).toBe(1000);
@@ -69,27 +82,53 @@ describe("computeDashboardAllocation", () => {
     expect(by.emergency).toBe(1000);
     expect(by.savings).toBe(600);
     expect(d.total).toBeCloseTo(5000, 6);
-    // Percents are of income.
     expect(d.slices.find((s) => s.key === "debt")!.percent).toBeCloseTo(40, 6);
   });
 
+  it("shows the actual debt repayment even when income is $0 (the fix)", () => {
+    // No income/budget, but a debt with a $300 minimum still must be repaid, so
+    // the Debt slice surfaces $300 instead of vanishing.
+    const debts = [debt({ minimumPayment: 300, totalBalance: 5000 })];
+    const d = computeDashboardAllocation(0, 0, split, [], debts, NOW);
+    const by = Object.fromEntries(d.slices.map((s) => [s.key, s.amount]));
+
+    expect(by.debt).toBe(300);
+    expect(d.debtRepayment).toBe(300);
+    expect(d.requiredMinimums).toBe(300);
+    expect(d.total).toBe(300);
+    expect(d.slices.find((s) => s.key === "debt")!.percent).toBe(100);
+  });
+
+  it("never repays more than what's still owed", () => {
+    // Huge budget (2500) but only $300 left on the debt → repayment capped at 300.
+    const debts = [debt({ minimumPayment: 100, totalBalance: 300, currentProgress: 0 })];
+    const d = computeDashboardAllocation(5000, 0, split, [], debts, NOW);
+    expect(d.debtRepayment).toBe(300);
+  });
+
+  it("has no debt slice when there are no debts", () => {
+    const d = computeDashboardAllocation(5000, 1000, split, [], [], NOW);
+    expect(d.debtRepayment).toBe(0);
+    expect(d.slices.find((s) => s.key === "debt")!.amount).toBe(0);
+  });
+
   it("puts all savings into the Savings slice when there's no EF goal", () => {
-    const d = computeDashboardAllocation(5000, 1000, split, [], NOW);
+    const d = computeDashboardAllocation(5000, 1000, split, [], [debt()], NOW);
     const by = Object.fromEntries(d.slices.map((s) => [s.key, s.amount]));
     expect(by.emergency).toBe(0);
     expect(by.savings).toBe(1600);
   });
 
-  it("caps bills at income and zeroes the rest when bills exceed income", () => {
-    const d = computeDashboardAllocation(1000, 5000, split, [goal()], NOW);
+  it("caps bills at income and zeroes discretionary slices when bills exceed income", () => {
+    const d = computeDashboardAllocation(1000, 5000, split, [goal()], [], NOW);
     const by = Object.fromEntries(d.slices.map((s) => [s.key, s.amount]));
     expect(by.expenses).toBe(1000);
-    expect(by.debt).toBe(0);
+    expect(by.debt).toBe(0); // no debts here
     expect(d.total).toBeCloseTo(1000, 6);
   });
 
-  it("is all zeroes at zero income (no divide-by-zero)", () => {
-    const d = computeDashboardAllocation(0, 0, split, [goal()], NOW);
+  it("is all zeroes at zero income with no debts (no divide-by-zero)", () => {
+    const d = computeDashboardAllocation(0, 0, split, [goal()], [], NOW);
     expect(d.total).toBe(0);
     expect(d.slices.every((s) => s.amount === 0 && s.percent === 0)).toBe(true);
   });
