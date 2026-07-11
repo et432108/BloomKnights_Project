@@ -1,8 +1,9 @@
-import * as Google from "expo-auth-session/providers/google";
+import { useCallback, useState } from "react";
+import { Platform } from "react-native";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithCredential,
+  signInWithPopup,
   signOut as fbSignOut,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -11,24 +12,43 @@ import { useAuthStore } from "@/store/useAuthStore";
 import type { UserProfile } from "@/types";
 
 /**
- * Hook that wires Federated Google OAuth via expo-auth-session into Firebase
- * Auth (README §Backend — Firebase Auth + Google OAuth).
+ * Google sign-in for web via Firebase's popup flow. Requires no OAuth client
+ * IDs — Firebase brokers the whole handshake. On success, `subscribeToAuth`
+ * reacts to the auth-state change and hydrates the stores.
+ *
+ * NOTE: `signInWithPopup` is web-only. Native (iOS/Android) needs a dedicated
+ * library (e.g. @react-native-google-signin/google-signin) — not wired up yet.
  */
 export function useGoogleAuth() {
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-  });
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const signInWithGoogleResponse = async () => {
-    if (response?.type !== "success") return;
-    const idToken = response.params.id_token;
-    const credential = GoogleAuthProvider.credential(idToken);
-    await signInWithCredential(auth, credential);
-  };
+  const signIn = useCallback(async () => {
+    if (Platform.OS !== "web") {
+      setError("Google sign-in is currently only wired up for web.");
+      return;
+    }
+    setError(null);
+    setIsSigningIn(true);
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (e) {
+      // The user dismissing the popup isn't a real failure — stay quiet on it.
+      const code = (e as { code?: string }).code;
+      if (
+        code !== "auth/popup-closed-by-user" &&
+        code !== "auth/cancelled-popup-request"
+      ) {
+        setError(
+          e instanceof Error ? e.message : "Sign-in failed. Please try again."
+        );
+      }
+    } finally {
+      setIsSigningIn(false);
+    }
+  }, []);
 
-  return { request, response, promptAsync, signInWithGoogleResponse };
+  return { signIn, isSigningIn, error };
 }
 
 /**

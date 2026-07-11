@@ -1,19 +1,11 @@
-import { useEffect } from "react";
 import { Redirect } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useGoogleAuth } from "@/services/auth";
 import { useAuthStore } from "@/store/useAuthStore";
 
 export default function Login() {
   const user = useAuthStore((s) => s.user);
-  const { request, response, promptAsync, signInWithGoogleResponse } =
-    useGoogleAuth();
-
-  useEffect(() => {
-    if (response?.type === "success") {
-      void signInWithGoogleResponse();
-    }
-  }, [response]);
+  const { signIn, isSigningIn, error } = useGoogleAuth();
 
   if (user) return <Redirect href="/(tabs)" />;
 
@@ -28,14 +20,22 @@ export default function Login() {
       </Text>
 
       <Pressable
-        disabled={!request}
-        onPress={() => promptAsync()}
+        disabled={isSigningIn}
+        onPress={() => void signIn()}
         className="w-full rounded-full bg-white px-6 py-4 active:opacity-80"
       >
-        <Text className="text-center text-base font-semibold text-brand">
-          Continue with Google
-        </Text>
+        {isSigningIn ? (
+          <ActivityIndicator color="#4F46E5" />
+        ) : (
+          <Text className="text-center text-base font-semibold text-brand">
+            Continue with Google
+          </Text>
+        )}
       </Pressable>
+
+      {error ? (
+        <Text className="mt-4 text-center text-sm text-indigo-100">{error}</Text>
+      ) : null}
     </View>
   );
 }
