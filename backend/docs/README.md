@@ -10,7 +10,7 @@ Start here:
 4. [[coaching-flow]]
 5. [[payments-ledger]]
 6. [[debt-interest-model]]
-7. [[build-and-test-prompt]] — execution brief: implement the above with Jest tests
+7. [[gap-inventory]]
 
 ## Purpose
 
@@ -19,7 +19,7 @@ The backend currently does two things well:
 - It serves coaching through a server-side Gemini Cloud Function.
 - It owns Firestore data access for user finance records.
 
-The implementation work that follows this note set should add a backend-owned payment ledger for user-entered payments and extend the debt schema so high-interest credit card payoff math is possible.
+The implementation work that follows this note set should add a backend-owned payment ledger for user-entered payments, extend the debt schema so high-interest credit card payoff math is possible, and preserve the server-side Gemini boundary.
 
 ## Reading Order
 
@@ -31,6 +31,7 @@ Use this order when implementing or reviewing code:
 4. Read [[coaching-flow]] to understand the existing Gemini path.
 5. Read [[payments-ledger]] to design the user-entered payment history.
 6. Read [[debt-interest-model]] to design interest-aware debt tracking.
+7. Read [[gap-inventory]] to see the missing backend pieces that still need implementation.
 
 ## Source Files
 
@@ -38,6 +39,5 @@ Use this order when implementing or reviewing code:
 - [backend/src/prompt.ts](../src/prompt.ts)
 - [backend/src/schema.ts](../src/schema.ts)
 - [backend/src/types.ts](../src/types.ts)
-- [frontend/src/lib/firestore.ts](../../frontend/src/lib/firestore.ts)
 - [firestore.rules](../../firestore.rules)
 - [README-LLM.md](../../README-LLM.md)

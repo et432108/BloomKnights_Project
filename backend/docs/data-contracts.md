@@ -67,6 +67,15 @@ To support high-interest credit card math, expand the debt record with fields li
 
 These fields let the backend calculate or approximate interest consistently across paydown strategies.
 
+## Missing Backend Pieces
+
+The current codebase still needs explicit backend support for:
+
+- storing user-entered debt payments,
+- computing payoff dates from balance, APR, and payment amount,
+- splitting payment amounts between principal and interest,
+- and preserving the payment history used for on-site listing.
+
 ## AI Output Schema
 
 The coaching response schema remains defined in [backend/src/schema.ts](../src/schema.ts).
