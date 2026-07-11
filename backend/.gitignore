@@ -1,0 +1,4 @@
+# Backend build & test artifacts
+lib/
+coverage/
+.env

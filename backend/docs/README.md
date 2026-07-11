@@ -10,6 +10,7 @@ Start here:
 4. [[coaching-flow]]
 5. [[payments-ledger]]
 6. [[debt-interest-model]]
+7. [[build-and-test-prompt]] — execution brief: implement the above with Jest tests
 
 ## Purpose
 
