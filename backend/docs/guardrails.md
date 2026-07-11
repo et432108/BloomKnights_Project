@@ -6,7 +6,6 @@ These rules are the boundary conditions for every backend change.
 
 - Gemini stays server-side in Cloud Functions.
 - Payments are recorded and served through backend-owned Firestore structures.
-- The frontend may submit payment data, but it should not define the canonical payment schema.
 - Firestore security remains owner-scoped by `userId`.
 - Structured AI output remains enforced through `responseSchema`.
 
@@ -16,6 +15,12 @@ These rules are the boundary conditions for every backend change.
 - Do not model payments as an ephemeral frontend-only store.
 - Do not mix manual payment history with coaching output.
 - Do not add payment processor assumptions unless the codebase explicitly introduces one.
+
+## What The Backend Owns
+
+- Firestore schema for debts, payment history, and interest metadata.
+- Server-side payoff math and interest-aware calculations.
+- The Gemini coaching Cloud Function.
 
 ## Current Backend Boundary
 
