@@ -11,6 +11,18 @@ export type TransactionType = "expense" | "income";
 
 export type UrgencyLevel = "low" | "medium" | "high";
 
+/** How often a debt's interest compounds — mirrors the backend contract. */
+export type CompoundingFrequency = "daily" | "monthly" | "annually";
+
+/** How a manual payment was made — mirrors the backend contract. */
+export type PaymentMethod =
+  | "bank_transfer"
+  | "debit_card"
+  | "credit_card"
+  | "cash"
+  | "check"
+  | "other";
+
 /** `users` collection — document id: {userId}. */
 export interface UserProfile {
   uid: string;
@@ -36,7 +48,46 @@ export interface Debt {
   interestRate: number;
   minimumPayment: number;
   currentProgress: number;
+
+  // Optional interest-aware fields (mirrors the backend contract). Existing
+  // debts predate these, so every field is optional and the UI falls back to
+  // `interestRate` when `aprPercent` is absent.
+  aprPercent?: number;
+  compoundingFrequency?: CompoundingFrequency;
+  billingCycleStartDate?: string; // ISO date
+  billingCycleEndDate?: string; // ISO date
+  paymentDueDate?: string; // ISO date
+  lastInterestAccruedAt?: string; // ISO timestamp
+  lastStatementBalance?: number;
+  statementCloseBalance?: number;
 }
+
+/**
+ * `payments` collection — document id: {paymentId}. A user-entered repayment
+ * against a debt. Mirrors the backend-owned contract; the client only submits
+ * the input fields (see `PaymentInput`). `principalPortion` / `interestPortion`
+ * are backend-owned and left unset by the client.
+ */
+export interface Payment {
+  id: string;
+  userId: string;
+  debtId: string;
+  amount: number;
+  paymentDate: string; // ISO date
+  method?: PaymentMethod;
+  note?: string;
+  principalPortion?: number;
+  interestPortion?: number;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
+/** Fields the client submits to record a payment; the rest are stamped on write. */
+export type PaymentInput = Pick<
+  Payment,
+  "userId" | "debtId" | "amount" | "paymentDate"
+> &
+  Partial<Pick<Payment, "method" | "note">>;
 
 /** `savings_goals` collection — document id: {goalId}. */
 export interface SavingsGoal {

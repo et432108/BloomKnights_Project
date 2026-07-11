@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -13,6 +14,8 @@ import {
 import { db } from "./firebase";
 import type {
   Debt,
+  Payment,
+  PaymentInput,
   SavingsGoal,
   Transaction,
   UserProfile,
@@ -142,4 +145,62 @@ export async function addTransaction(
     date: Timestamp.fromDate(new Date(tx.date)),
   });
   return ref.id;
+}
+
+// ---- payments --------------------------------------------------------------
+// The `payments` collection is backend-owned (schema + rules). There is no
+// server write endpoint, so — consistent with debts/transactions above — the
+// client writes directly to the owner-scoped collection and stamps the
+// server-owned timestamps itself. The principal/interest split stays backend-
+// owned and is left unset here. See frontend/docs/payments-ui.md.
+
+function paymentFromDoc(id: string, data: Record<string, unknown>): Payment {
+  return {
+    id,
+    userId: data.userId as string,
+    debtId: data.debtId as string,
+    amount: data.amount as number,
+    paymentDate: toIso(data.paymentDate),
+    method: data.method as Payment["method"],
+    note: data.note as string | undefined,
+    principalPortion: data.principalPortion as number | undefined,
+    interestPortion: data.interestPortion as number | undefined,
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt),
+  };
+}
+
+export async function fetchPayments(userId: string): Promise<Payment[]> {
+  const q = query(
+    collection(db, "payments"),
+    where("userId", "==", userId),
+    orderBy("paymentDate", "desc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => paymentFromDoc(d.id, d.data()));
+}
+
+export async function addPayment(input: PaymentInput): Promise<Payment> {
+  const now = new Date();
+  const ref = await addDoc(collection(db, "payments"), {
+    userId: input.userId,
+    debtId: input.debtId,
+    amount: input.amount,
+    paymentDate: Timestamp.fromDate(new Date(input.paymentDate)),
+    ...(input.method ? { method: input.method } : {}),
+    ...(input.note ? { note: input.note } : {}),
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
+  });
+  return {
+    id: ref.id,
+    userId: input.userId,
+    debtId: input.debtId,
+    amount: input.amount,
+    paymentDate: new Date(input.paymentDate).toISOString(),
+    method: input.method,
+    note: input.note,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
 }

@@ -15,7 +15,11 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
-      <Tabs.Screen name="debts" options={{ title: "Debts" }} />
+      {/* Debts is a nested stack (list + detail); it owns its own headers. */}
+      <Tabs.Screen
+        name="debts"
+        options={{ title: "Debts", headerShown: false }}
+      />
       <Tabs.Screen name="savings" options={{ title: "Savings" }} />
       <Tabs.Screen name="coaching" options={{ title: "Coach" }} />
     </Tabs>
