@@ -1,5 +1,7 @@
 import {
   HIGH_INTEREST_THRESHOLD,
+  buildPayoffPlan,
+  computeMonthlyPayments,
   effectiveApr,
   isHighInterest,
   knightRank,
@@ -120,5 +122,150 @@ describe("knightRank", () => {
     expect(knightRank(0.5)).toBe("Champion");
     expect(knightRank(0.75)).toBe("Paladin");
     expect(knightRank(1)).toBe("Debt-Free Legend");
+  });
+});
+
+describe("buildPayoffPlan", () => {
+  const from = new Date("2026-01-01T00:00:00Z");
+
+  it("reserves required debts' minimums before avalanche-ing the rest", () => {
+    const debts: Debt[] = [
+      debt({
+        id: "mortgage",
+        name: "Mortgage",
+        totalBalance: 200000,
+        interestRate: 4,
+        minimumPayment: 1000,
+        isRequired: true,
+      }),
+      debt({
+        id: "visa",
+        name: "Visa",
+        totalBalance: 1000,
+        interestRate: 24,
+        minimumPayment: 50,
+      }),
+      debt({
+        id: "amex",
+        name: "Amex",
+        totalBalance: 500,
+        interestRate: 12,
+        minimumPayment: 25,
+      }),
+    ];
+    // income 3000, no fixed bills, 50% debt target -> debtBudget 1500
+    // required reserves 1000 -> revolvingBudget 500
+    const plan = buildPayoffPlan(debts, 3000, 50, 0, from);
+
+    expect(plan.discretionaryIncome).toBe(3000);
+    expect(plan.debtBudget).toBe(1500);
+    expect(plan.requiredTotal).toBe(1000);
+    expect(plan.revolvingBudget).toBe(500);
+    expect(plan.shortfall).toBe(0);
+    expect(plan.revolvingShortfall).toBe(0);
+
+    const month1 = plan.schedule[0];
+    const mortgageLine = month1.lines.find((l) => l.debtId === "mortgage")!;
+    const visaLine = month1.lines.find((l) => l.debtId === "visa")!;
+    const amexLine = month1.lines.find((l) => l.debtId === "amex")!;
+
+    // Required debt gets exactly its minimum, never extra.
+    expect(mortgageLine.payment).toBe(1000);
+    // Highest-APR revolving debt (Visa, 24%) gets the waterfall extra.
+    expect(visaLine.payment).toBeGreaterThan(amexLine.payment);
+    // All of the revolving budget is spent (mins + extra), none left idle.
+    expect(visaLine.payment + amexLine.payment).toBeCloseTo(500, 5);
+
+    // Eventually every revolving debt reaches zero.
+    expect(plan.debtFreeDate).not.toBeNull();
+    expect(plan.monthsToDebtFree).toBeGreaterThan(0);
+    const lastRow = plan.schedule[plan.schedule.length - 1];
+    for (const l of lastRow.lines) {
+      if (!l.isRequired) expect(l.remainingBalance).toBeLessThanOrEqual(0.01);
+    }
+  });
+
+  it("surfaces a shortfall when the budget can't cover required debts", () => {
+    const debts: Debt[] = [
+      debt({
+        id: "mortgage",
+        totalBalance: 200000,
+        interestRate: 4,
+        minimumPayment: 2000,
+        isRequired: true,
+      }),
+    ];
+    // income 3000, 20% debt target -> debtBudget 600, required needs 2000
+    const plan = buildPayoffPlan(debts, 3000, 20, 0, from);
+
+    expect(plan.debtBudget).toBe(600);
+    expect(plan.requiredTotal).toBe(2000);
+    expect(plan.shortfall).toBe(1400);
+    expect(plan.revolvingBudget).toBe(0);
+  });
+
+  it("subtracts fixed expenses from income before computing the debt budget", () => {
+    const debts: Debt[] = [debt({ id: "visa", totalBalance: 500, interestRate: 20, minimumPayment: 25 })];
+    const plan = buildPayoffPlan(debts, 3000, 50, 1000, from);
+
+    expect(plan.discretionaryIncome).toBe(2000);
+    expect(plan.debtBudget).toBe(1000);
+  });
+
+  it("returns an empty schedule with no revolving debts", () => {
+    const plan = buildPayoffPlan([], 3000, 50, 0, from);
+    expect(plan.schedule).toEqual([]);
+    expect(plan.monthsToDebtFree).toBe(0);
+    expect(plan.debtFreeDate).not.toBeNull();
+  });
+});
+
+describe("computeMonthlyPayments", () => {
+  // Income 5000, no fixed bills, 50% to debt => 2500 monthly debt budget.
+  const income = 5000;
+  const debtPct = 50;
+
+  it("pays required minimums off the top, then waterfalls the rest by APR", () => {
+    const debts = [
+      debt({ id: "mortgage", name: "Mortgage", isRequired: true, minimumPayment: 1000, totalBalance: 200000, interestRate: 6 }),
+      debt({ id: "visa", name: "Visa", minimumPayment: 100, totalBalance: 4000, interestRate: 24 }),
+      debt({ id: "amex", name: "Amex", minimumPayment: 100, totalBalance: 4000, interestRate: 18 }),
+    ];
+    const pay = computeMonthlyPayments(debts, income, debtPct, 0);
+    const by = Object.fromEntries(pay.map((p) => [p.debtId, p.amount]));
+
+    // Mortgage: full minimum, no extra. Budget left = 2500 - 1000 = 1500.
+    expect(by.mortgage).toBe(1000);
+    // Both revolving minimums (100 each) then all 1300 extra onto the 24% Visa.
+    expect(by.visa).toBe(100 + 1300);
+    expect(by.amex).toBe(100);
+    // Whole budget accounted for.
+    expect(pay.reduce((s, p) => s + p.amount, 0)).toBe(2500);
+  });
+
+  it("provisions required-only debts (which the projection schedule skips)", () => {
+    const debts = [
+      debt({ id: "car", name: "Car", isRequired: true, minimumPayment: 400, totalBalance: 12000 }),
+    ];
+    const pay = computeMonthlyPayments(debts, income, debtPct, 0);
+    expect(pay).toEqual([
+      { debtId: "car", name: "Car", isRequired: true, amount: 400 },
+    ]);
+  });
+
+  it("never pays more than the remaining balance", () => {
+    const debts = [
+      debt({ id: "visa", name: "Visa", minimumPayment: 100, totalBalance: 300, currentProgress: 250, interestRate: 24 }),
+    ];
+    const pay = computeMonthlyPayments(debts, income, debtPct, 0);
+    // Only 50 remains, so at most 50 is scheduled despite a huge budget.
+    expect(pay).toEqual([
+      { debtId: "visa", name: "Visa", isRequired: false, amount: 50 },
+    ]);
+  });
+
+  it("returns nothing when the debt budget is zero", () => {
+    const debts = [debt({ id: "visa", minimumPayment: 100 })];
+    expect(computeMonthlyPayments(debts, 0, debtPct, 0)).toEqual([]);
   });
 });

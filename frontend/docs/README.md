@@ -7,8 +7,7 @@ Start here:
 1. [[data-loading]]
 2. [[snapshot-flow]]
 3. [[coaching-call]]
-4. [[payments-ui]]
-5. [[frontend-gap-inventory]]
+4. [[frontend-gap-inventory]]
 
 ## Purpose
 

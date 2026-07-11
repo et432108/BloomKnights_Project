@@ -20,6 +20,7 @@ export default function NewDebt() {
   const [balance, setBalance] = useState("");
   const [apr, setApr] = useState("");
   const [minPayment, setMinPayment] = useState("");
+  const [isRequired, setIsRequired] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +45,7 @@ export default function NewDebt() {
         aprPercent: rate,
         minimumPayment,
         currentProgress: 0,
+        isRequired,
       });
       router.back();
     } catch (err) {
@@ -88,6 +90,26 @@ export default function NewDebt() {
               placeholderTextColor="#9CA3AF"
               className="rounded-lg border border-gray-200 px-3 py-2 text-gray-900 dark:border-gray-600 dark:text-white"
             />
+            <Pressable
+              onPress={() => setIsRequired((v) => !v)}
+              className="flex-row items-center justify-between rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-600"
+            >
+              <View>
+                <Text className="text-sm text-gray-900 dark:text-white">
+                  Required payment (mortgage, car loan)
+                </Text>
+                <Text className="text-xs text-gray-500 dark:text-gray-400">
+                  Always reserved in full before extra goes to other debts.
+                </Text>
+              </View>
+              <View
+                className={`h-6 w-11 rounded-full ${isRequired ? "bg-brand" : "bg-gray-300 dark:bg-gray-600"}`}
+              >
+                <View
+                  className={`m-0.5 h-5 w-5 rounded-full bg-white ${isRequired ? "ml-5" : ""}`}
+                />
+              </View>
+            </Pressable>
             {error && <Text className="text-sm text-debt">{error}</Text>}
             <Pressable
               disabled={submitting}

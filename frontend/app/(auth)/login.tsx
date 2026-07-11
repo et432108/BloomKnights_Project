@@ -25,7 +25,7 @@ export default function Login() {
         className="w-full rounded-full bg-white px-6 py-4 active:opacity-80"
       >
         {isSigningIn ? (
-          <ActivityIndicator color="#4F46E5" />
+          <ActivityIndicator color="#0d631b" />
         ) : (
           <Text className="text-center text-base font-semibold text-brand">
             Continue with Google

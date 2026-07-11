@@ -8,9 +8,9 @@ Start here:
 2. [[guardrails]]
 3. [[data-contracts]]
 4. [[coaching-flow]]
-5. [[payments-ledger]]
-6. [[debt-interest-model]]
-7. [[gap-inventory]]
+5. [[debt-interest-model]]
+6. [[gap-inventory]]
+7. [user-data-schema](user-data-schema.md)
 
 ## Purpose
 
@@ -19,7 +19,10 @@ The backend currently does two things well:
 - It serves coaching through a server-side Gemini Cloud Function.
 - It owns Firestore data access for user finance records.
 
-The implementation work that follows this note set should add a backend-owned payment ledger for user-entered payments, extend the debt schema so high-interest credit card payoff math is possible, and preserve the server-side Gemini boundary.
+There is no user-entered payment ledger — the app instead computes a
+month-by-month payoff plan (see `frontend/src/lib/debt.ts#buildPayoffPlan`)
+that tells the user how much to put toward each debt, rather than asking
+them to log payments.
 
 ## Reading Order
 
@@ -29,9 +32,9 @@ Use this order when implementing or reviewing code:
 2. Read [[guardrails]] for non-negotiable system constraints.
 3. Read [[data-contracts]] for the current schema and note the proposed extensions.
 4. Read [[coaching-flow]] to understand the existing Gemini path.
-5. Read [[payments-ledger]] to design the user-entered payment history.
-6. Read [[debt-interest-model]] to design interest-aware debt tracking.
-7. Read [[gap-inventory]] to see the missing backend pieces that still need implementation.
+5. Read [[debt-interest-model]] to design interest-aware debt tracking.
+6. Read [[gap-inventory]] to see the missing backend pieces that still need implementation.
+7. Read [user-data-schema](user-data-schema.md) for the current per-user Firestore schema (debts, fixed_expenses, savings_goals, transactions).
 
 ## Source Files
 

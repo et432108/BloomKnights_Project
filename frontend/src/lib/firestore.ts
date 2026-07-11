@@ -2,10 +2,10 @@ import {
   Timestamp,
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
-  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -13,9 +13,9 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type {
+  BalanceSnapshot,
   Debt,
-  Payment,
-  PaymentInput,
+  FixedExpense,
   SavingsGoal,
   Transaction,
   UserProfile,
@@ -50,22 +50,24 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
       savingsTargetPercent: 0,
       funMoneyPercent: 0,
     },
+    lastProvisionedMonth: data.lastProvisionedMonth ?? undefined,
   };
 }
 
 export async function upsertUserProfile(profile: UserProfile): Promise<void> {
-  await setDoc(
-    doc(db, "users", profile.uid),
-    {
-      uid: profile.uid,
-      email: profile.email,
-      displayName: profile.displayName,
-      createdAt: Timestamp.fromDate(new Date(profile.createdAt)),
-      monthlyIncome: profile.monthlyIncome,
-      allocations: profile.allocations,
-    },
-    { merge: true }
-  );
+  const data: Record<string, unknown> = {
+    uid: profile.uid,
+    email: profile.email,
+    displayName: profile.displayName,
+    createdAt: Timestamp.fromDate(new Date(profile.createdAt)),
+    monthlyIncome: profile.monthlyIncome,
+    allocations: profile.allocations,
+  };
+  // Firestore rejects `undefined`; only write the guard once it's set.
+  if (profile.lastProvisionedMonth) {
+    data.lastProvisionedMonth = profile.lastProvisionedMonth;
+  }
+  await setDoc(doc(db, "users", profile.uid), data, { merge: true });
 }
 
 // ---- debts -----------------------------------------------------------------
@@ -147,60 +149,67 @@ export async function addTransaction(
   return ref.id;
 }
 
-// ---- payments --------------------------------------------------------------
-// The `payments` collection is backend-owned (schema + rules). There is no
-// server write endpoint, so — consistent with debts/transactions above — the
-// client writes directly to the owner-scoped collection and stamps the
-// server-owned timestamps itself. The principal/interest split stays backend-
-// owned and is left unset here. See frontend/docs/payments-ui.md.
+// ---- fixed_expenses ---------------------------------------------------------
+// Recurring monthly obligations that are NOT debts (rent, insurance,
+// subscriptions). Summed into the payoff plan's required-budget math.
 
-function paymentFromDoc(id: string, data: Record<string, unknown>): Payment {
-  return {
-    id,
-    userId: data.userId as string,
-    debtId: data.debtId as string,
-    amount: data.amount as number,
-    paymentDate: toIso(data.paymentDate),
-    method: data.method as Payment["method"],
-    note: data.note as string | undefined,
-    principalPortion: data.principalPortion as number | undefined,
-    interestPortion: data.interestPortion as number | undefined,
-    createdAt: toIso(data.createdAt),
-    updatedAt: toIso(data.updatedAt),
-  };
+export async function fetchFixedExpenses(userId: string): Promise<FixedExpense[]> {
+  const q = query(collection(db, "fixed_expenses"), where("userId", "==", userId));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      userId: data.userId,
+      name: data.name,
+      amount: data.amount,
+    };
+  });
 }
 
-export async function fetchPayments(userId: string): Promise<Payment[]> {
+export async function addFixedExpense(
+  expense: Omit<FixedExpense, "id">
+): Promise<string> {
+  const ref = await addDoc(collection(db, "fixed_expenses"), expense);
+  return ref.id;
+}
+
+export async function deleteFixedExpense(expenseId: string): Promise<void> {
+  await deleteDoc(doc(db, "fixed_expenses", expenseId));
+}
+
+// ---- balance_snapshots ------------------------------------------------------
+// One doc per user per month ({userId}_{monthKey}) recording the total-balance
+// figure, powering the dashboard's month-over-month trend.
+
+export async function fetchBalanceSnapshots(
+  userId: string
+): Promise<BalanceSnapshot[]> {
   const q = query(
-    collection(db, "payments"),
-    where("userId", "==", userId),
-    orderBy("paymentDate", "desc")
+    collection(db, "balance_snapshots"),
+    where("userId", "==", userId)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => paymentFromDoc(d.id, d.data()));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      userId: data.userId,
+      monthKey: data.monthKey,
+      balance: data.balance,
+      createdAt: toIso(data.createdAt),
+    };
+  });
 }
 
-export async function addPayment(input: PaymentInput): Promise<Payment> {
-  const now = new Date();
-  const ref = await addDoc(collection(db, "payments"), {
-    userId: input.userId,
-    debtId: input.debtId,
-    amount: input.amount,
-    paymentDate: Timestamp.fromDate(new Date(input.paymentDate)),
-    ...(input.method ? { method: input.method } : {}),
-    ...(input.note ? { note: input.note } : {}),
-    createdAt: Timestamp.fromDate(now),
-    updatedAt: Timestamp.fromDate(now),
-  });
-  return {
-    id: ref.id,
-    userId: input.userId,
-    debtId: input.debtId,
-    amount: input.amount,
-    paymentDate: new Date(input.paymentDate).toISOString(),
-    method: input.method,
-    note: input.note,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  };
+export async function upsertBalanceSnapshot(
+  userId: string,
+  monthKey: string,
+  balance: number
+): Promise<void> {
+  await setDoc(
+    doc(db, "balance_snapshots", `${userId}_${monthKey}`),
+    { userId, monthKey, balance, createdAt: Timestamp.fromDate(new Date()) },
+    { merge: true }
+  );
 }

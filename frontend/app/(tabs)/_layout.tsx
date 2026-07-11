@@ -11,16 +11,23 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: true,
-        tabBarActiveTintColor: "#4F46E5",
+        tabBarActiveTintColor: "#0d631b",
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: "Home", headerShown: false }}
+      />
       {/* Debts is a nested stack (list + detail); it owns its own headers. */}
       <Tabs.Screen
         name="debts"
         options={{ title: "Debts", headerShown: false }}
       />
       <Tabs.Screen name="savings" options={{ title: "Savings" }} />
+      <Tabs.Screen
+        name="expenses"
+        options={{ title: "Expenses", headerShown: false }}
+      />
       <Tabs.Screen name="coaching" options={{ title: "Coach" }} />
     </Tabs>
   );

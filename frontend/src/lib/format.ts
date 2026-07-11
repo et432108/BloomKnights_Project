@@ -24,6 +24,10 @@ export const shortDate = (iso: string): string => {
   });
 };
 
+/** "YYYY-MM" key for a date (defaults to now) — used for monthly bookkeeping. */
+export const currentMonthKey = (date: Date = new Date()): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
 /** Human label for a payoff horizon in months, e.g. "1 yr 4 mo". */
 export const monthsLabel = (months: number): string => {
   if (months <= 0) return "Paid off";

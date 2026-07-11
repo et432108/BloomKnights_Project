@@ -1,7 +1,11 @@
 rules_version = '2';
 
 // Every document is scoped to its owner via the userId field (or the doc id for
-// the users collection). No cross-user reads or writes.
+// the users collection). No cross-user reads or writes. These are all TOP-LEVEL
+// collections (debts, savings_goals, transactions, fixed_expenses are NOT
+// subcollections of users) — ownership is a userId *field* on each document,
+// checked against request.auth.uid. Field checks below are matched to the
+// exact writes issued by frontend/src/lib/firestore.ts.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -9,33 +13,120 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
+    function isNonNegNumber(v) {
+      return v is number && v >= 0;
     }
 
+    // ---- users/{userId} : doc id is the uid ----
+    // Written only by upsertUserProfile() (setDoc merge, create + update alike).
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      allow write: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string
+        && isNonNegNumber(request.resource.data.monthlyIncome)
+        && request.resource.data.allocations is map
+        && isNonNegNumber(request.resource.data.allocations.debtTargetPercent)
+        && isNonNegNumber(request.resource.data.allocations.savingsTargetPercent)
+        && isNonNegNumber(request.resource.data.allocations.funMoneyPercent);
+    }
+
+    // ---- debts/{debtId} ----
+    // addDebt() creates the full record; updateDebtProgress() only ever
+    // patches currentProgress. userId is immutable once set.
     match /debts/{debtId} {
       allow read: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId);
+
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.name is string
+        && isNonNegNumber(request.resource.data.totalBalance)
+        && isNonNegNumber(request.resource.data.interestRate)
+        && isNonNegNumber(request.resource.data.minimumPayment)
+        && isNonNegNumber(request.resource.data.currentProgress)
+        && (!("isRequired" in request.resource.data.keys()) || request.resource.data.isRequired is bool);
+
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNonNegNumber(request.resource.data.currentProgress)
+        && (!("isRequired" in request.resource.data.keys()) || request.resource.data.isRequired is bool);
+
+      allow delete: if isOwner(resource.data.userId);
     }
 
+    // ---- fixed_expenses/{expenseId} ----
+    // Recurring monthly obligations that are NOT debts (rent, insurance,
+    // subscriptions). Summed into the payoff plan's required-budget math.
+    match /fixed_expenses/{expenseId} {
+      allow read: if isOwner(resource.data.userId);
+
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.amount is number && request.resource.data.amount > 0;
+
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.amount is number && request.resource.data.amount > 0;
+
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ---- savings_goals/{goalId} ----
     match /savings_goals/{goalId} {
       allow read: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId);
+
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.title is string
+        && request.resource.data.targetAmount is number && request.resource.data.targetAmount > 0
+        && isNonNegNumber(request.resource.data.currentAmount);
+
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNonNegNumber(request.resource.data.currentAmount);
+
+      allow delete: if isOwner(resource.data.userId);
     }
 
+    // ---- balance_snapshots/{userId}_{monthKey} ----
+    // One doc per user per month recording the total-balance figure for the
+    // dashboard trend. Written by upsertBalanceSnapshot(); ownership via the
+    // userId field (doc id embeds it but the field is the source of truth).
+    match /balance_snapshots/{snapshotId} {
+      allow read: if isOwner(resource.data.userId);
+
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.monthKey is string
+        && isNonNegNumber(request.resource.data.balance);
+
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.monthKey is string
+        && isNonNegNumber(request.resource.data.balance);
+
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ---- transactions/{transactionId} ----
+    // addTransaction() is the only client write path — no edit/delete UI
+    // exists today, so transactions are an append-only ledger. Loosen this
+    // deliberately if an edit/undo feature is added later.
     match /transactions/{transactionId} {
       allow read: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId);
+
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.amount is number && request.resource.data.amount > 0
+        && request.resource.data.type in ["expense", "income"]
+        && request.resource.data.bucket in ["debt", "savings", "fun_money", "fixed_bills"]
+        && request.resource.data.description is string;
+
+      allow update, delete: if false;
     }
 
-    // Backend-owned payments ledger (backend/docs/payments-ledger.md).
-    match /payments/{paymentId} {
-      allow read: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId);
+    // Deny anything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

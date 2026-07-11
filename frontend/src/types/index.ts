@@ -14,15 +14,6 @@ export type UrgencyLevel = "low" | "medium" | "high";
 /** How often a debt's interest compounds — mirrors the backend contract. */
 export type CompoundingFrequency = "daily" | "monthly" | "annually";
 
-/** How a manual payment was made — mirrors the backend contract. */
-export type PaymentMethod =
-  | "bank_transfer"
-  | "debit_card"
-  | "credit_card"
-  | "cash"
-  | "check"
-  | "other";
-
 /** `users` collection — document id: {userId}. */
 export interface UserProfile {
   uid: string;
@@ -31,6 +22,12 @@ export interface UserProfile {
   createdAt: string; // ISO timestamp
   monthlyIncome: number;
   allocations: Allocations;
+  /**
+   * "YYYY-MM" of the last month the user's debt budget was provisioned (applied
+   * to debt balances). Guards the "provision this month's payments" action so a
+   * month can't be double-applied — see services/provisioning.ts.
+   */
+  lastProvisionedMonth?: string;
 }
 
 export interface Allocations {
@@ -49,6 +46,14 @@ export interface Debt {
   minimumPayment: number;
   currentProgress: number;
 
+  /**
+   * A debt with a fixed required installment (mortgage, car loan) as opposed
+   * to a revolving balance (credit card). Required debts always get their
+   * full `minimumPayment` reserved first in the payoff plan and never
+   * receive avalanche extra — see `buildPayoffPlan` in lib/debt.ts.
+   */
+  isRequired?: boolean;
+
   // Optional interest-aware fields (mirrors the backend contract). Existing
   // debts predate these, so every field is optional and the UI falls back to
   // `interestRate` when `aprPercent` is absent.
@@ -63,31 +68,30 @@ export interface Debt {
 }
 
 /**
- * `payments` collection — document id: {paymentId}. A user-entered repayment
- * against a debt. Mirrors the backend-owned contract; the client only submits
- * the input fields (see `PaymentInput`). `principalPortion` / `interestPortion`
- * are backend-owned and left unset by the client.
+ * `fixed_expenses` collection — document id: {expenseId}. Recurring monthly
+ * obligations that are NOT debts (no balance to pay off): rent, insurance,
+ * subscriptions, etc. Their sum is subtracted from income before the payoff
+ * plan computes the debt budget (see `buildPayoffPlan` in lib/debt.ts).
  */
-export interface Payment {
+export interface FixedExpense {
   id: string;
   userId: string;
-  debtId: string;
-  amount: number;
-  paymentDate: string; // ISO date
-  method?: PaymentMethod;
-  note?: string;
-  principalPortion?: number;
-  interestPortion?: number;
-  createdAt: string; // ISO timestamp
-  updatedAt: string; // ISO timestamp
+  name: string; // e.g., "Rent"
+  amount: number; // monthly amount
 }
 
-/** Fields the client submits to record a payment; the rest are stamped on write. */
-export type PaymentInput = Pick<
-  Payment,
-  "userId" | "debtId" | "amount" | "paymentDate"
-> &
-  Partial<Pick<Payment, "method" | "note">>;
+/**
+ * `balance_snapshots` collection — document id: {userId}_{monthKey}. One row per
+ * user per month capturing the total-balance figure, so the dashboard can show a
+ * month-over-month trend. Written once per month; see services/snapshots.ts.
+ */
+export interface BalanceSnapshot {
+  id: string;
+  userId: string;
+  monthKey: string; // "YYYY-MM"
+  balance: number;
+  createdAt: string; // ISO timestamp
+}
 
 /** `savings_goals` collection — document id: {goalId}. */
 export interface SavingsGoal {

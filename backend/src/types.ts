@@ -7,15 +7,6 @@ export type UrgencyLevel = "low" | "medium" | "high";
 /** How often interest is capitalized onto the balance (debt-interest-model). */
 export type CompoundingFrequency = "daily" | "monthly" | "annually";
 
-/** How a manual payment was made. Kept open-ended; no processor assumptions. */
-export type PaymentMethod =
-  | "bank_transfer"
-  | "debit_card"
-  | "credit_card"
-  | "cash"
-  | "check"
-  | "other";
-
 export interface Allocations {
   debtTargetPercent: number;
   savingsTargetPercent: number;
@@ -30,6 +21,13 @@ export interface Debt {
   interestRate: number;
   minimumPayment: number;
   currentProgress: number;
+
+  /**
+   * A debt with a fixed required installment (mortgage, car loan) as opposed
+   * to a revolving balance (credit card). Required debts always get their
+   * full `minimumPayment` reserved first in the payoff plan.
+   */
+  isRequired?: boolean;
 
   // --- Interest-aware fields (debt-interest-model). All OPTIONAL so existing
   // debt records and screens keep working without migration. ---
@@ -52,37 +50,17 @@ export interface Debt {
 }
 
 /**
- * A user-entered payment against a debt (payments-ledger). Backend-owned and
- * owner-scoped by `userId`. Modeled as a top-level `payments` collection so the
- * primary "show all payments for a user" query is a single indexed lookup.
- * Distinct from `Transaction` — a repayment is not generic spending.
+ * `fixed_expenses` collection. Recurring monthly obligations that are NOT
+ * debts (no balance to pay off): rent, insurance, subscriptions, etc. Their
+ * sum is subtracted from income before the payoff plan computes the debt
+ * budget.
  */
-export interface Payment {
+export interface FixedExpense {
   id: string;
   userId: string;
-  debtId: string;
-  /** Total amount paid, in the account currency. Must be > 0. */
+  name: string;
   amount: number;
-  /** ISO date string of when the payment was made. */
-  paymentDate: string;
-  method?: PaymentMethod;
-  note?: string;
-  /** Portion of `amount` that reduced principal. */
-  principalPortion?: number;
-  /** Portion of `amount` that covered accrued interest. */
-  interestPortion?: number;
-  /** ISO timestamp set by the backend on write. */
-  createdAt: string;
-  /** ISO timestamp updated by the backend on every write. */
-  updatedAt: string;
 }
-
-/** Fields a client may submit to create a payment; the backend owns the rest. */
-export type PaymentInput = Pick<
-  Payment,
-  "userId" | "debtId" | "amount" | "paymentDate"
-> &
-  Partial<Pick<Payment, "method" | "note" | "principalPortion" | "interestPortion">>;
 
 export interface SavingsGoal {
   id: string;

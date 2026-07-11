@@ -1,18 +1,22 @@
 import { create } from "zustand";
 import {
   addDebt as addDebtDoc,
-  addPayment as addPaymentDoc,
+  addFixedExpense as addFixedExpenseDoc,
+  deleteFixedExpense as deleteFixedExpenseDoc,
+  fetchBalanceSnapshots,
   fetchDebts,
-  fetchPayments,
+  fetchFixedExpenses,
   fetchSavingsGoals,
   fetchTransactions,
-  updateDebtProgress,
+  updateDebtProgress as updateDebtProgressDoc,
+  upsertBalanceSnapshot,
 } from "@/lib/firestore";
+import { currentMonthKey } from "@/lib/format";
 import type {
+  BalanceSnapshot,
   Debt,
   FinancialSnapshot,
-  Payment,
-  PaymentInput,
+  FixedExpense,
   SavingsGoal,
   Transaction,
 } from "@/types";
@@ -22,71 +26,163 @@ interface FinanceState {
   debts: Debt[];
   savingsGoals: SavingsGoal[];
   transactions: Transaction[];
-  payments: Payment[];
+  fixedExpenses: FixedExpense[];
+  balanceSnapshots: BalanceSnapshot[];
   loading: boolean;
   error: string | null;
-  /** Pull all buckets (incl. payments) for the signed-in user. */
+  /** Pull all buckets (incl. fixed expenses and balance snapshots) for the user. */
   loadAll: (userId: string) => Promise<void>;
-  /** Payments for a single debt, newest first. */
-  paymentsForDebt: (debtId: string) => Payment[];
+  /**
+   * Record this month's total-balance figure (idempotent per month) so the
+   * dashboard trend has data to compare against. Updates local state too.
+   */
+  recordBalanceSnapshot: (balance: number) => Promise<void>;
   /** Create a new debt and add it to local state. */
   addDebt: (input: Omit<Debt, "id">) => Promise<void>;
-  /** Record a payment, then optimistically advance the debt's progress. */
-  addPayment: (input: PaymentInput) => Promise<void>;
+  /**
+   * Apply a set of payments to debts — increment each debt's `currentProgress`
+   * (capped at its balance) and persist. This is the primitive behind
+   * provisioning a month's debt budget; see services/provisioning.ts.
+   */
+  recordPayments: (payments: { debtId: string; amount: number }[]) => Promise<void>;
+  /** Record a recurring fixed expense (rent, insurance, ...) and add it to local state. */
+  addFixedExpense: (input: Omit<FixedExpense, "id">) => Promise<void>;
+  /** Remove a fixed expense. */
+  removeFixedExpense: (expenseId: string) => Promise<void>;
   /** Assemble the snapshot passed to the AI coaching Cloud Function. */
   buildSnapshot: () => FinancialSnapshot | null;
+  /** Clear all state on sign-out. */
+  reset: () => void;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
   debts: [],
   savingsGoals: [],
   transactions: [],
-  payments: [],
+  fixedExpenses: [],
+  balanceSnapshots: [],
   loading: false,
   error: null,
 
   loadAll: async (userId) => {
     set({ loading: true, error: null });
-    try {
-      const [debts, savingsGoals, transactions, payments] = await Promise.all([
-        fetchDebts(userId),
-        fetchSavingsGoals(userId),
-        fetchTransactions(userId),
-        fetchPayments(userId),
-      ]);
-      set({ debts, savingsGoals, transactions, payments, loading: false });
-    } catch (err) {
-      set({ error: (err as Error).message, loading: false });
-    }
+
+    // Settle independently so one failing query (e.g. a Firestore index still
+    // building) doesn't blank out buckets that loaded fine.
+    const [
+      debtsResult,
+      savingsGoalsResult,
+      transactionsResult,
+      fixedExpensesResult,
+      snapshotsResult,
+    ] = await Promise.allSettled([
+      fetchDebts(userId),
+      fetchSavingsGoals(userId),
+      fetchTransactions(userId),
+      fetchFixedExpenses(userId),
+      fetchBalanceSnapshots(userId),
+    ]);
+
+    const failures = [
+      debtsResult,
+      savingsGoalsResult,
+      transactionsResult,
+      fixedExpensesResult,
+      snapshotsResult,
+    ]
+      .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+      .map((r) => r.reason);
+    failures.forEach((reason) =>
+      console.error("useFinanceStore.loadAll: a bucket failed to load:", reason)
+    );
+
+    set({
+      ...(debtsResult.status === "fulfilled" && { debts: debtsResult.value }),
+      ...(savingsGoalsResult.status === "fulfilled" && {
+        savingsGoals: savingsGoalsResult.value,
+      }),
+      ...(transactionsResult.status === "fulfilled" && {
+        transactions: transactionsResult.value,
+      }),
+      ...(fixedExpensesResult.status === "fulfilled" && {
+        fixedExpenses: fixedExpensesResult.value,
+      }),
+      ...(snapshotsResult.status === "fulfilled" && {
+        balanceSnapshots: snapshotsResult.value,
+      }),
+      loading: false,
+      error: failures.length
+        ? (failures[0] as Error).message ?? "Some data failed to load."
+        : null,
+    });
   },
 
-  paymentsForDebt: (debtId) =>
-    get().payments.filter((p) => p.debtId === debtId),
+  recordBalanceSnapshot: async (balance) => {
+    const profile = useAuthStore.getState().profile;
+    if (!profile) return;
+    const monthKey = currentMonthKey();
+    const existing = get().balanceSnapshots.find((s) => s.monthKey === monthKey);
+    // Nothing changed this month — skip the write.
+    if (existing && existing.balance === balance) return;
+
+    await upsertBalanceSnapshot(profile.uid, monthKey, balance);
+    const snapshot: BalanceSnapshot = {
+      id: `${profile.uid}_${monthKey}`,
+      userId: profile.uid,
+      monthKey,
+      balance,
+      createdAt: new Date().toISOString(),
+    };
+    set({
+      balanceSnapshots: [
+        ...get().balanceSnapshots.filter((s) => s.monthKey !== monthKey),
+        snapshot,
+      ],
+    });
+  },
 
   addDebt: async (input) => {
     const id = await addDebtDoc(input);
     set({ debts: [...get().debts, { id, ...input }] });
   },
 
-  addPayment: async (input) => {
-    const payment = await addPaymentDoc(input);
-
-    // Optimistically advance the debt's paid progress so balances and payoff
-    // estimates reflect the new payment immediately (capped at the balance).
-    const debt = get().debts.find((d) => d.id === input.debtId);
-    let debts = get().debts;
-    if (debt) {
-      const nextProgress = Math.min(
-        debt.totalBalance,
-        debt.currentProgress + input.amount
-      );
-      debts = debts.map((d) =>
-        d.id === debt.id ? { ...d, currentProgress: nextProgress } : d
-      );
-      await updateDebtProgress(debt.id, nextProgress);
+  recordPayments: async (payments) => {
+    const debts = get().debts;
+    // Fold payments into new progress values, capping each at its balance so an
+    // over-budget or repeated payment can never push progress past the total.
+    const nextProgress = new Map<string, number>();
+    for (const { debtId, amount } of payments) {
+      if (!(amount > 0)) continue;
+      const debt = debts.find((d) => d.id === debtId);
+      if (!debt) continue;
+      const base = nextProgress.get(debtId) ?? debt.currentProgress;
+      const capped = Math.min(debt.totalBalance, base + amount);
+      if (capped !== base) nextProgress.set(debtId, capped);
     }
+    if (nextProgress.size === 0) return;
 
-    set({ payments: [payment, ...get().payments], debts });
+    await Promise.all(
+      [...nextProgress].map(([id, progress]) => updateDebtProgressDoc(id, progress))
+    );
+    set({
+      debts: get().debts.map((d) =>
+        nextProgress.has(d.id)
+          ? { ...d, currentProgress: nextProgress.get(d.id)! }
+          : d
+      ),
+    });
+  },
+
+  addFixedExpense: async (input) => {
+    const id = await addFixedExpenseDoc(input);
+    set({ fixedExpenses: [...get().fixedExpenses, { id, ...input }] });
+  },
+
+  removeFixedExpense: async (expenseId) => {
+    await deleteFixedExpenseDoc(expenseId);
+    set({
+      fixedExpenses: get().fixedExpenses.filter((e) => e.id !== expenseId),
+    });
   },
 
   buildSnapshot: () => {
@@ -104,4 +200,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       ),
     };
   },
+
+  reset: () =>
+    set({
+      debts: [],
+      savingsGoals: [],
+      transactions: [],
+      fixedExpenses: [],
+      balanceSnapshots: [],
+      loading: false,
+      error: null,
+    }),
 }));

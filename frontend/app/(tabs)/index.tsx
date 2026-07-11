@@ -1,194 +1,261 @@
-import { useEffect } from "react";
-import { Link } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import type { ReactNode } from "react";
-import { Card } from "@/components/Card";
+import { useEffect, useMemo, useState } from "react";
+import { MaterialIcons } from "@expo/vector-icons";
+import {
+  Alert,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { ProgressBar } from "@/components/ProgressBar";
+import { DonutChart } from "@/components/DonutChart";
 import { signOut } from "@/services/auth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useFinanceStore } from "@/store/useFinanceStore";
-import { currency, percent } from "@/lib/format";
-import { knightRank, payoffSummary } from "@/lib/debt";
+import { currency, currentMonthKey, percent } from "@/lib/format";
+import { payoffForDebt, payoffSummary, remainingBalance } from "@/lib/debt";
+import { computeBalanceTrend, computeDashboardAllocation } from "@/lib/dashboard";
 
-/** Home hub navigation tile linking to one of the main areas. */
-function QuickTile({
-  href,
-  emoji,
-  label,
-}: {
-  href: "/debts" | "/savings" | "/coaching";
-  emoji: string;
-  label: string;
-}) {
-  return (
-    <Link href={href} asChild>
-      <Pressable className="flex-1 active:opacity-80">
-        <View className="items-center rounded-2xl bg-white p-4 shadow-sm dark:bg-gray-800">
-          <Text className="text-2xl">{emoji}</Text>
-          <Text className="mt-1 text-xs font-medium text-gray-700 dark:text-gray-200">
-            {label}
-          </Text>
-        </View>
-      </Pressable>
-    </Link>
-  );
-}
+type Range = "annual" | "month";
 
-function Bucket({
-  title,
-  percentLabel,
-  color,
-  children,
-}: {
-  title: string;
-  percentLabel: string;
-  color: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card>
-      <View className="mb-2 flex-row items-center justify-between">
-        <Text className="font-semibold text-gray-900 dark:text-white">
-          {title}
-        </Text>
-        <Text className={color}>{percentLabel}</Text>
-      </View>
-      {children}
-    </Card>
-  );
-}
-
-export default function Home() {
+export default function Dashboard() {
   const profile = useAuthStore((s) => s.profile);
-  const { debts, savingsGoals, transactions, payments, loadAll } =
-    useFinanceStore();
+  const debts = useFinanceStore((s) => s.debts);
+  const savingsGoals = useFinanceStore((s) => s.savingsGoals);
+  const transactions = useFinanceStore((s) => s.transactions);
+  const fixedExpenses = useFinanceStore((s) => s.fixedExpenses);
+  const balanceSnapshots = useFinanceStore((s) => s.balanceSnapshots);
+  const recordBalanceSnapshot = useFinanceStore((s) => s.recordBalanceSnapshot);
 
-  useEffect(() => {
-    if (profile?.uid) void loadAll(profile.uid);
-  }, [profile?.uid]);
+  const [range, setRange] = useState<Range>("month");
 
-  if (!profile) return null;
-
-  const income = profile.monthlyIncome;
-  const { debtTargetPercent, savingsTargetPercent, funMoneyPercent } =
-    profile.allocations;
-
-  const funSpent = transactions
-    .filter((t) => t.bucket === "fun_money" && t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const funBudget = (income * funMoneyPercent) / 100;
-  const funRatio = funBudget ? funSpent / funBudget : 0;
-  const overFun = funSpent > funBudget;
-
-  const totalSaved = savingsGoals.reduce((s, g) => s + g.currentAmount, 0);
-  const totalSavingsTarget = savingsGoals.reduce(
-    (s, g) => s + g.targetAmount,
-    0
+  const income = profile?.monthlyIncome ?? 0;
+  const fixedTotal = useMemo(
+    () => fixedExpenses.reduce((sum, e) => sum + e.amount, 0),
+    [fixedExpenses]
   );
 
-  const journey = payoffSummary(debts);
-  const rank = knightRank(journey.ratio);
+  const allocation = useMemo(
+    () =>
+      profile
+        ? computeDashboardAllocation(
+            income,
+            fixedTotal,
+            profile.allocations,
+            savingsGoals
+          )
+        : null,
+    [profile, income, fixedTotal, savingsGoals]
+  );
+
+  const journey = useMemo(() => payoffSummary(debts), [debts]);
+
+  // Total balance = this month's budget total (= income). Trend compares it to
+  // the most recent prior monthly snapshot.
+  const trend = useMemo(
+    () => computeBalanceTrend(balanceSnapshots, currentMonthKey(), income),
+    [balanceSnapshots, income]
+  );
+
+  // Record this month's balance once we know the income, so trends accrue.
+  useEffect(() => {
+    if (income > 0) void recordBalanceSnapshot(income);
+  }, [income, recordBalanceSnapshot]);
+
+  // Notification alerts derived from current data.
+  const alerts = useMemo(() => {
+    const out: string[] = [];
+    const funBudget = allocation?.slices.find((s) => s.key === "fun")?.amount ?? 0;
+    const funSpent = transactions
+      .filter((t) => t.bucket === "fun_money" && t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+    if (funBudget > 0 && funSpent > funBudget) {
+      out.push(
+        `Fun money over budget: ${currency(funSpent)} spent of ${currency(funBudget)}.`
+      );
+    }
+    for (const d of debts) {
+      if (remainingBalance(d) > 0 && !payoffForDebt(d).paidOff) {
+        out.push(`${d.name}: the minimum payment doesn't cover its interest.`);
+      }
+    }
+    return out;
+  }, [allocation, transactions, debts]);
+
+  if (!profile || !allocation) return null;
+
+  const factor = range === "annual" ? 12 : 1;
+  const openNotifications = () =>
+    Alert.alert(
+      alerts.length ? "Alerts" : "All clear",
+      alerts.length ? alerts.join("\n\n") : "No alerts right now."
+    );
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 dark:bg-gray-900">
-      <View className="gap-4 p-4">
+    <SafeAreaView className="flex-1 bg-surface dark:bg-gray-900">
+      <ScrollView contentContainerClassName="mx-auto w-full max-w-6xl gap-6 p-4 pb-10">
+        {/* Top bar */}
         <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-gray-900 dark:text-white">
-            Hi, {profile.displayName.split(" ")[0]}
+          <Text className="font-headline text-3xl font-bold text-on-surface dark:text-white">
+            Dashboard
           </Text>
-          <Pressable onPress={() => void signOut()}>
-            <Text className="text-sm font-medium text-brand">Sign out</Text>
-          </Pressable>
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={openNotifications}
+              className="relative rounded-full p-2 active:bg-surface-container"
+            >
+              <MaterialIcons name="notifications-none" size={24} color="#40493d" />
+              {alerts.length > 0 && (
+                <View className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-error" />
+              )}
+            </Pressable>
+            <Pressable onPress={() => void signOut()} className="px-2 active:opacity-60">
+              <Text className="text-sm font-bold text-primary">Sign Out</Text>
+            </Pressable>
+          </View>
         </View>
 
-        {/* Gamified debt-free quest — the hub's centerpiece */}
-        <View className="rounded-2xl bg-brand p-5 shadow-sm">
-          <View className="mb-1 flex-row items-center justify-between">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-indigo-100">
-              Debt-free quest
-            </Text>
-            <View className="rounded-full bg-white/20 px-2 py-0.5">
-              <Text className="text-[11px] font-bold text-white">🛡️ {rank}</Text>
+        {/* Filters + debt progress */}
+        <View className="gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <View className="flex-row items-center gap-2 self-start rounded-full border border-outline-variant bg-surface-container p-1">
+            {(["annual", "month"] as Range[]).map((r) => {
+              const active = range === r;
+              return (
+                <Pressable
+                  key={r}
+                  onPress={() => setRange(r)}
+                  className={`rounded-full px-6 py-1.5 ${active ? "bg-primary" : ""}`}
+                >
+                  <Text
+                    className={`text-sm font-bold ${
+                      active ? "text-on-primary" : "text-on-surface-variant"
+                    }`}
+                  >
+                    {r === "annual" ? "Annual" : "Monthly"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View className="min-w-[260px] rounded-xl border border-outline-variant bg-white p-4 dark:bg-gray-800">
+            <View className="mb-2 flex-row items-end justify-between">
+              <Text className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant dark:text-gray-400">
+                Debt · {percent(journey.ratio * 100)} paid
+              </Text>
+              <Text className="text-sm font-bold text-primary">
+                {currency(journey.remaining)} left
+              </Text>
+            </View>
+            <ProgressBar value={journey.ratio} color="bg-primary" />
+          </View>
+        </View>
+
+        {/* Fund allocation */}
+        <View className="rounded-3xl border border-outline-variant bg-white p-6 shadow-sm dark:bg-gray-800">
+          <View className="mb-6 flex-row items-center justify-between">
+            <View>
+              <Text className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant dark:text-gray-400">
+                Overview
+              </Text>
+              <Text className="font-headline text-2xl font-bold text-on-surface dark:text-white">
+                Fund Allocation
+              </Text>
             </View>
           </View>
-          <Text className="mb-3 text-3xl font-extrabold text-white">
-            {debts.length === 0
-              ? "No debts — you're free!"
-              : journey.remaining === 0
-                ? "Debt-free! 🎉"
-                : `${currency(journey.remaining)} to go`}
-          </Text>
-          <ProgressBar value={journey.ratio} color="bg-white" />
-          <Text className="mt-2 text-xs text-indigo-100">
-            {percent(journey.ratio * 100)} paid ·{" "}
-            {currency(journey.totalPaid)} of {currency(journey.totalOriginal)} ·{" "}
-            {payments.length} payment{payments.length === 1 ? "" : "s"} logged
-          </Text>
+
+          <View className="items-center gap-8 lg:flex-row lg:items-center lg:justify-center">
+            <DonutChart
+              segments={allocation.slices.map((s) => ({
+                value: s.amount,
+                color: s.color,
+              }))}
+              size={260}
+              strokeWidth={28}
+            >
+              <Text className="font-display text-4xl font-bold text-on-surface dark:text-white">
+                {currency(allocation.total * factor)}
+              </Text>
+              <Text className="text-on-surface-variant dark:text-gray-400">
+                {range === "annual" ? "Total / yr" : "Total Budget"}
+              </Text>
+            </DonutChart>
+
+            <View className="w-full gap-3 lg:max-w-md lg:flex-1">
+              {allocation.slices.map((s) => (
+                <View
+                  key={s.key}
+                  className="flex-row items-center justify-between rounded-2xl border border-outline-variant bg-surface-container-lowest p-4 dark:border-gray-700 dark:bg-gray-900"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View
+                      style={{ backgroundColor: s.color }}
+                      className="h-4 w-4 rounded-full"
+                    />
+                    <Text className="text-base font-medium text-on-surface dark:text-white">
+                      {s.label}
+                    </Text>
+                  </View>
+                  <View className="items-end">
+                    <Text className="text-lg font-bold text-on-surface dark:text-white">
+                      {currency(s.amount * factor)}
+                    </Text>
+                    <Text className="text-xs text-on-surface-variant dark:text-gray-400">
+                      {percent(s.percent)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
 
-        {/* Quick navigation to the main areas */}
-        <View className="flex-row gap-3">
-          <QuickTile href="/debts" emoji="🗡️" label="Debts" />
-          <QuickTile href="/savings" emoji="🌱" label="Savings" />
-          <QuickTile href="/coaching" emoji="🤖" label="Coach" />
+        {/* Total balance + AI insight */}
+        <View className="rounded-2xl border border-primary/20 bg-primary-container/20 p-6 dark:border-gray-700 dark:bg-gray-800">
+          <View className="mb-4 gap-4 md:flex-row md:items-start md:justify-between">
+            <View>
+              <Text className="text-xs font-bold uppercase tracking-widest text-primary">
+                Total Balance
+              </Text>
+              <View className="flex-row items-baseline gap-2">
+                <Text className="font-display text-4xl font-bold text-primary">
+                  {currency(income * factor)}
+                </Text>
+                {trend.deltaPct != null ? (
+                  <View className="flex-row items-center rounded-full bg-secondary-container px-2 py-0.5">
+                    <MaterialIcons
+                      name={trend.deltaPct >= 0 ? "trending-up" : "trending-down"}
+                      size={16}
+                      color="#2a6b2c"
+                    />
+                    <Text className="ml-1 text-sm font-bold text-secondary">
+                      {trend.deltaPct >= 0 ? "+" : ""}
+                      {trend.deltaPct.toFixed(1)}%
+                    </Text>
+                  </View>
+                ) : (
+                  <Text className="text-xs text-on-surface-variant dark:text-gray-400">
+                    no trend yet
+                  </Text>
+                )}
+              </View>
+            </View>
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons name="auto-awesome" size={18} color="#0d631b" />
+              <Text className="text-xs font-bold uppercase tracking-wide text-primary">
+                AI Personal Insight
+              </Text>
+            </View>
+          </View>
+          <Text className="text-base leading-relaxed text-on-surface-variant dark:text-gray-300">
+            Your monthly plan puts {currency(allocation.slices[1].amount)} toward
+            debt and {currency(allocation.slices[3].amount + allocation.slices[4].amount)}{" "}
+            into savings. Ask the Coach for tailored guidance on hitting your goals
+            faster.
+          </Text>
         </View>
-
-        <Card>
-          <Text className="text-sm text-gray-500 dark:text-gray-400">
-            Monthly income
-          </Text>
-          <Text className="text-3xl font-bold text-gray-900 dark:text-white">
-            {currency(income)}
-          </Text>
-        </Card>
-
-        {/* Bucket 1 — Debt */}
-        <Bucket
-          title="🗡️ Debt Repayment"
-          percentLabel={percent(debtTargetPercent)}
-          color="text-debt"
-        >
-          <Text className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">
-            {currency(journey.remaining)} <Text className="text-sm">remaining</Text>
-          </Text>
-          <Text className="text-xs text-gray-500 dark:text-gray-400">
-            {currency((income * debtTargetPercent) / 100)}/mo allocated across{" "}
-            {debts.length} balance{debts.length === 1 ? "" : "s"}
-          </Text>
-        </Bucket>
-
-        {/* Bucket 2 — Savings */}
-        <Bucket
-          title="🌱 Savings Goals"
-          percentLabel={percent(savingsTargetPercent)}
-          color="text-savings"
-        >
-          <ProgressBar
-            value={totalSavingsTarget ? totalSaved / totalSavingsTarget : 0}
-            color="bg-savings"
-          />
-          <Text className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {currency(totalSaved)} of {currency(totalSavingsTarget)} saved
-          </Text>
-        </Bucket>
-
-        {/* Bucket 3 — Fun Money */}
-        <Bucket
-          title="🎉 Fun Money"
-          percentLabel={percent(funMoneyPercent)}
-          color="text-fun"
-        >
-          <ProgressBar value={funRatio} color={overFun ? "bg-debt" : "bg-fun"} />
-          <Text
-            className={`mt-2 text-xs ${
-              overFun ? "text-debt" : "text-gray-500 dark:text-gray-400"
-            }`}
-          >
-            {currency(funSpent)} of {currency(funBudget)} spent
-            {overFun ? " — over budget!" : ""}
-          </Text>
-        </Bucket>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

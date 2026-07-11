@@ -9,6 +9,7 @@ import {
 import { auth } from "@/lib/firebase";
 import { fetchUserProfile, upsertUserProfile } from "@/lib/firestore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useFinanceStore } from "@/store/useFinanceStore";
 import type { UserProfile } from "@/types";
 
 /**
@@ -61,6 +62,7 @@ export function subscribeToAuth() {
     setUser(user);
     if (!user) {
       setProfile(null);
+      useFinanceStore.getState().reset();
       return;
     }
 
@@ -74,6 +76,7 @@ export function subscribeToAuth() {
       await upsertUserProfile(profile);
     }
     setProfile(profile);
+    void useFinanceStore.getState().loadAll(user.uid);
   });
 }
 

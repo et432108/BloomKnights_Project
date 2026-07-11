@@ -19,11 +19,18 @@ export default function DebtsList() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <Link href="/debts/new" asChild>
-              <Pressable className="px-2 active:opacity-60">
-                <Text className="text-base font-semibold text-brand">+ Add</Text>
-              </Pressable>
-            </Link>
+            <View className="flex-row items-center gap-4">
+              <Link href="/debts/plan" asChild>
+                <Pressable className="px-2 active:opacity-60">
+                  <Text className="text-base font-semibold text-brand">Plan</Text>
+                </Pressable>
+              </Link>
+              <Link href="/debts/new" asChild>
+                <Pressable className="px-2 active:opacity-60">
+                  <Text className="text-base font-semibold text-brand">+ Add</Text>
+                </Pressable>
+              </Link>
+            </View>
           ),
         }}
       />
@@ -51,6 +58,13 @@ export default function DebtsList() {
                       {item.name}
                     </Text>
                     <View className="flex-row items-center gap-2">
+                      {item.isRequired && (
+                        <View className="rounded-full bg-gray-200 px-2 py-0.5 dark:bg-gray-700">
+                          <Text className="text-[10px] font-bold text-gray-700 dark:text-gray-200">
+                            REQUIRED
+                          </Text>
+                        </View>
+                      )}
                       {isHighInterest(apr) && (
                         <View className="rounded-full bg-debt px-2 py-0.5">
                           <Text className="text-[10px] font-bold text-white">
