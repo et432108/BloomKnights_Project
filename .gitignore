@@ -29,8 +29,8 @@ yarn-error.*
 # Env / secrets
 .env
 .env.local
-functions/.env
-functions/lib/
+backend/.env
+backend/lib/
 
 # Firebase
 .firebase/

@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import * as Google from "expo-auth-session/providers/google";
 import {
   GoogleAuthProvider,
@@ -11,17 +10,15 @@ import { fetchUserProfile, upsertUserProfile } from "@/lib/firestore";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { UserProfile } from "@/types";
 
-const extra = Constants.expoConfig?.extra ?? {};
-
 /**
  * Hook that wires Federated Google OAuth via expo-auth-session into Firebase
  * Auth (README §Backend — Firebase Auth + Google OAuth).
  */
 export function useGoogleAuth() {
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: extra.googleWebClientId,
-    iosClientId: extra.googleIosClientId,
-    androidClientId: extra.googleAndroidClientId,
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });
 
   const signInWithGoogleResponse = async () => {
