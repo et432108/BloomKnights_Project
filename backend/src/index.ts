@@ -48,6 +48,18 @@ export async function handleCoaching(
     throw new HttpsError("invalid-argument", "Malformed financial snapshot.");
   }
 
+  // A missing/empty key means the GEMINI_API_KEY secret isn't set on this
+  // deployed function. Surface that as an actionable error instead of letting
+  // the Gemini client (or an unset-secret crash) fail with an opaque "internal".
+  if (!apiKey) {
+    throw new HttpsError(
+      "failed-precondition",
+      'Coaching is unavailable: the server has no Gemini API key configured. An admin must set a ' +
+        'Google AI Studio key (starts with "AIza") via ' +
+        "`firebase functions:secrets:set GEMINI_API_KEY` and redeploy."
+    );
+  }
+
   const ai = new GoogleGenAI({ apiKey });
 
   try {

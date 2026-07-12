@@ -54,6 +54,13 @@ describe("handleCoaching", () => {
     expect(mockGenerateContent).not.toHaveBeenCalled();
   });
 
+  it("fails with an actionable error when the API key secret is unset", async () => {
+    await expect(handleCoaching(request(), "")).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
   it("returns structured coaching on the happy path", async () => {
     const items = [
       {
