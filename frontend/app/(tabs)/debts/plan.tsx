@@ -1,19 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, Stack } from "expo-router";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useFinanceStore } from "@/store/useFinanceStore";
 import { currency, monthsLabel, shortDate } from "@/lib/format";
-import { buildPayoffPlan, computeMonthlyPayments } from "@/lib/debt";
-import { currentMonthKey, provisionThisMonth } from "@/services/provisioning";
+import { buildPayoffPlan } from "@/lib/debt";
 
 export default function PayoffPlanScreen() {
   const profile = useAuthStore((s) => s.profile);
@@ -34,59 +26,6 @@ export default function PayoffPlanScreen() {
       fixedTotal
     );
   }, [debts, profile, fixedTotal]);
-
-  // This month's cash split — what "Provision" will actually apply to balances.
-  const thisMonthPayments = useMemo(
-    () =>
-      profile
-        ? computeMonthlyPayments(
-            debts,
-            profile.monthlyIncome,
-            profile.allocations.debtTargetPercent,
-            fixedTotal
-          )
-        : [],
-    [debts, profile, fixedTotal]
-  );
-  const provisionTotal = thisMonthPayments.reduce((s, p) => s + p.amount, 0);
-  const alreadyProvisioned = profile?.lastProvisionedMonth === currentMonthKey();
-  const monthName = new Date().toLocaleDateString("en-US", { month: "long" });
-
-  const [busy, setBusy] = useState(false);
-
-  const runProvision = async () => {
-    setBusy(true);
-    try {
-      const res = await provisionThisMonth();
-      if (res.status === "done") {
-        Alert.alert(
-          "Payments provisioned",
-          `Applied ${currency(res.totalApplied)} across ${res.payments.length} debt${
-            res.payments.length === 1 ? "" : "s"
-          } for ${monthName}.`
-        );
-      } else if (res.status === "already") {
-        Alert.alert("Already provisioned", `You've already provisioned ${monthName}.`);
-      } else {
-        Alert.alert("Nothing to provision", "There are no payments to apply right now.");
-      }
-    } catch (err) {
-      Alert.alert("Couldn't provision", (err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirmProvision = () => {
-    Alert.alert(
-      `Provision ${monthName}?`,
-      `Apply ${currency(provisionTotal)} across your debts now? This records the payments against your balances.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Provision", onPress: () => void runProvision() },
-      ]
-    );
-  };
 
   if (!profile || !plan) {
     return (
@@ -167,35 +106,6 @@ export default function PayoffPlanScreen() {
           </View>
         </Card>
       </View>
-
-      {debts.length > 0 && provisionTotal > 0 && (
-        <View className="px-4 pt-3">
-          {alreadyProvisioned ? (
-            <View className="rounded-full bg-savings/15 px-6 py-3">
-              <Text className="text-center text-base font-semibold text-savings">
-                ✓ Provisioned for {monthName}
-              </Text>
-            </View>
-          ) : (
-            <Pressable
-              disabled={busy}
-              onPress={confirmProvision}
-              className="rounded-full bg-brand px-6 py-3 active:opacity-80"
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-center text-base font-semibold text-white">
-                  Provision {currency(provisionTotal)} for {monthName}
-                </Text>
-              )}
-            </Pressable>
-          )}
-          <Text className="mt-1.5 text-center text-xs text-gray-400">
-            Applies each debt&apos;s payment below to its balance.
-          </Text>
-        </View>
-      )}
 
       {debts.length === 0 ? (
         <Text className="mt-12 text-center text-gray-400">

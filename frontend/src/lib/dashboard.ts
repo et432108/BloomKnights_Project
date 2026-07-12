@@ -2,30 +2,39 @@ import type { Allocations, BalanceSnapshot, Debt, SavingsGoal } from "@/types";
 import { remainingBalance } from "@/lib/debt";
 
 /**
- * Dashboard fund-allocation model — the 5-slice pie on the Home dashboard.
+ * Dashboard fund-allocation model — the budget pie on the Home dashboard.
  *
- * A *planned monthly outflow*:
- *   Expenses  = fixed bills (derived from fixed_expenses, not a % you set)
- *   Debt      = your ACTUAL monthly debt repayment, driven by the debts
- *               themselves (not just the allocation %): at least the required
- *               minimum payments, up to the debt budget (discretionary × debt%),
- *               never more than you still owe. This is why the debt figure
- *               shows up whenever you have debts — even before income is set.
- *   the discretionary remainder splits by the savings/fun percentages:
- *     Fun Money = discretionary × fun%
- *     Savings $ = discretionary × savings%, which is then split into:
+ * A *planned monthly outflow*, split into two groups:
+ *
+ *   REQUIRED (non-discretionary — comes out of income first):
+ *     Expenses               = fixed bills (from fixed_expenses)
+ *     Required Debt Payments = minimum payments on required debts (mortgage,
+ *                              car loan — `isRequired`), capped at what's owed.
+ *
+ *   DISCRETIONARY (what's left after required obligations — split by %):
+ *     discretionary = income − (fixed bills + required debt payments)
+ *     Debt Paydown = discretionary × debt%, funding the *revolving* debts
+ *                    (credit cards): at least their minimums, up to the budget,
+ *                    never more than owed.
+ *     Fun Money    = discretionary × fun%
+ *     Savings $    = discretionary × savings%, split into:
  *       Emergency Fund = monthly contribution toward the EF savings goal
  *       Savings        = whatever savings dollars remain
  *
- * Because Debt is debt-driven rather than a fixed % of income, the slices sum
- * to `total` (which may differ from income): a total above income flags that
- * required payments outstrip the budget; below income means budget to spare.
+ * Required debt is treated like a fixed obligation, NOT as discretionary
+ * spending — so savings/fun are computed from income *after* required debt is
+ * set aside, and are never inflated by money already spoken for.
+ *
+ * Slices sum to `total`, which may exceed income: a total above income flags
+ * that required obligations outstrip the budget; below income means room to
+ * spare. This is why the total can be larger than the discretionary number.
  */
 
 /** Distinct, CVD-validated slice colors (see dataviz palette validation). */
 export const SLICE_COLORS = {
   expenses: "#10b981", // emerald
-  debt: "#6366f1", // indigo
+  requiredDebt: "#8b5cf6", // violet — required debt minimums (non-discretionary)
+  debt: "#6366f1", // indigo — discretionary debt paydown
   fun: "#f59e0b", // amber
   emergency: "#f43f5e", // rose
   savings: "#0ea5e9", // sky
@@ -33,27 +42,36 @@ export const SLICE_COLORS = {
 
 export type SliceKey = keyof typeof SLICE_COLORS;
 
+/** Required = must-pay obligations; discretionary = what you choose to do with the rest. */
+export type SliceGroup = "required" | "discretionary";
+
 export interface AllocationSlice {
   key: SliceKey;
   label: string;
   /** Planned monthly dollars for this slice. */
   amount: number;
-  /** Share of total income, 0..100. */
+  /** Share of the total planned outflow, 0..100. */
   percent: number;
   color: string;
+  group: SliceGroup;
 }
 
 export interface DashboardAllocation {
   income: number;
   fixedBills: number;
+  /** Minimum payments on required debts (mortgage, car loan) — non-discretionary. */
+  requiredDebtPayments: number;
+  /** fixedBills + requiredDebtPayments — the non-discretionary floor. */
+  requiredObligations: number;
+  /** income − requiredObligations, never below 0. */
   discretionary: number;
-  /** Actual monthly debt repayment driving the Debt slice. */
+  /** Total monthly debt repayment: required minimums + discretionary paydown. */
   debtRepayment: number;
-  /** Sum of required minimum payments across all debts (the repayment floor). */
+  /** Sum of required minimum payments across ALL debts (the repayment floor). */
   requiredMinimums: number;
-  /** Ordered: expenses, debt, fun, emergency, savings. */
+  /** Ordered: expenses, requiredDebt, debt, fun, emergency, savings. */
   slices: AllocationSlice[];
-  /** Sum of slice amounts (may differ from income — see module docs). */
+  /** Sum of slice amounts (may exceed income — see module docs). */
   total: number;
 }
 
@@ -121,7 +139,7 @@ export function emergencyFundMonthly(
   return Math.min(monthly, Math.max(0, savingsDollars));
 }
 
-/** Build the 5-slice fund allocation from income, fixed bills, debts, and the split. */
+/** Build the fund allocation from income, fixed bills, debts, and the split. */
 export function computeDashboardAllocation(
   income: number,
   fixedBills: number,
@@ -133,19 +151,34 @@ export function computeDashboardAllocation(
   const safeIncome = Math.max(0, income);
   // Bills can't exceed income for the pie's part-to-whole to hold.
   const bills = Math.min(Math.max(0, fixedBills), safeIncome);
-  const discretionary = Math.max(0, safeIncome - bills);
 
-  // Debt is driven by the actual debts, not just the allocation %.
-  const totalOwed = debts.reduce((sum, d) => sum + remainingBalance(d), 0);
-  const requiredMinimums = debts.reduce(
+  // Required debts (mortgage, car loan) are a non-discretionary obligation, like
+  // fixed bills: their minimum payments come out of income *before* the
+  // discretionary split, so savings/fun are never inflated by money that's
+  // already spoken for. Revolving debts (credit cards) are funded from the
+  // discretionary debt budget, matching the app's avalanche payoff model.
+  const requiredDebts = debts.filter((d) => d.isRequired);
+  const revolvingDebts = debts.filter((d) => !d.isRequired);
+
+  const requiredDebtPayments = requiredDebts.reduce(
     (sum, d) => sum + Math.min(d.minimumPayment, remainingBalance(d)),
     0
   );
+  const requiredObligations = bills + requiredDebtPayments;
+  // Savings/fun/paydown all draw from what's left after required obligations.
+  const discretionary = Math.max(0, safeIncome - requiredObligations);
+
+  // Discretionary debt paydown funds the revolving debts: at least their
+  // minimums, up to the debt budget, never more than what's still owed.
+  const revolvingOwed = revolvingDebts.reduce((s, d) => s + remainingBalance(d), 0);
+  const revolvingMinimums = revolvingDebts.reduce(
+    (s, d) => s + Math.min(d.minimumPayment, remainingBalance(d)),
+    0
+  );
   const debtBudget = (discretionary * allocations.debtTargetPercent) / 100;
-  // At least the required minimums, up to the budget, never more than you owe.
-  const debtRepayment = Math.max(
-    Math.min(requiredMinimums, totalOwed),
-    Math.min(debtBudget, totalOwed)
+  const revolvingRepayment = Math.max(
+    Math.min(revolvingMinimums, revolvingOwed),
+    Math.min(debtBudget, revolvingOwed)
   );
 
   const funDollars = (discretionary * allocations.funMoneyPercent) / 100;
@@ -155,31 +188,52 @@ export function computeDashboardAllocation(
   const savingsRest = Math.max(0, savingsDollars - emergencyDollars);
 
   // Percent is share of the total planned outflow (so the pie reads as a whole
-  // even when debt repayment pushes the total above or below income).
+  // even when required obligations push the total above or below income).
   const total =
-    bills + debtRepayment + funDollars + emergencyDollars + savingsRest;
+    bills +
+    requiredDebtPayments +
+    revolvingRepayment +
+    funDollars +
+    emergencyDollars +
+    savingsRest;
   const pct = (amt: number) => (total > 0 ? (amt / total) * 100 : 0);
-  const slice = (key: SliceKey, label: string, amount: number): AllocationSlice => ({
+  const slice = (
+    key: SliceKey,
+    label: string,
+    amount: number,
+    group: SliceGroup
+  ): AllocationSlice => ({
     key,
     label,
     amount,
     percent: pct(amount),
     color: SLICE_COLORS[key],
+    group,
   });
 
   const slices: AllocationSlice[] = [
-    slice("expenses", "Expenses", bills),
-    slice("debt", "Debt", debtRepayment),
-    slice("fun", "Fun Money", funDollars),
-    slice("emergency", "Emergency Fund", emergencyDollars),
-    slice("savings", "Savings", savingsRest),
+    slice("expenses", "Expenses", bills, "required"),
+    slice("requiredDebt", "Required Debt Payments", requiredDebtPayments, "required"),
+    slice("debt", "Debt Paydown", revolvingRepayment, "discretionary"),
+    slice("fun", "Fun Money", funDollars, "discretionary"),
+    slice("emergency", "Emergency Fund", emergencyDollars, "discretionary"),
+    slice("savings", "Savings", savingsRest, "discretionary"),
   ];
+
+  // Repayment floor across ALL debts — used elsewhere as the interest-agnostic
+  // "you must pay at least this much toward debt" figure.
+  const requiredMinimums = debts.reduce(
+    (sum, d) => sum + Math.min(d.minimumPayment, remainingBalance(d)),
+    0
+  );
 
   return {
     income: safeIncome,
     fixedBills: bills,
+    requiredDebtPayments,
+    requiredObligations,
     discretionary,
-    debtRepayment,
+    debtRepayment: requiredDebtPayments + revolvingRepayment,
     requiredMinimums,
     slices,
     total,

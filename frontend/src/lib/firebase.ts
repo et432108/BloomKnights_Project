@@ -1,7 +1,7 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 /**
  * Firebase client initialization.
@@ -37,3 +37,17 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
+
+// Dev: route Cloud Function calls to the local Functions emulator when
+// EXPO_PUBLIC_USE_FUNCTIONS_EMULATOR=true (start it with `cd backend && npm run
+// serve`). Without this, callable functions like `getCoaching` always hit the
+// deployed project even in local development. Guarded so Fast Refresh, which can
+// re-run this module, doesn't try to connect twice.
+const g = globalThis as { __bkFunctionsEmulator?: boolean };
+if (
+  process.env.EXPO_PUBLIC_USE_FUNCTIONS_EMULATOR === "true" &&
+  !g.__bkFunctionsEmulator
+) {
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  g.__bkFunctionsEmulator = true;
+}

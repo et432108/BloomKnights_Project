@@ -132,6 +132,72 @@ describe("computeDashboardAllocation", () => {
     expect(d.total).toBe(0);
     expect(d.slices.every((s) => s.amount === 0 && s.percent === 0)).toBe(true);
   });
+
+  it("pulls required debt minimums out of discretionary as a required obligation", () => {
+    // income 5000, bills 1000, a required car loan (min 500) + a revolving Visa.
+    // required obligations = 1000 + 500 = 1500 → discretionary = 3500.
+    const debts = [
+      debt({ id: "car", name: "Car loan", minimumPayment: 500, totalBalance: 100000, isRequired: true }),
+      debt({ id: "visa", name: "Visa", minimumPayment: 100, totalBalance: 10000 }),
+    ];
+    const d = computeDashboardAllocation(5000, 1000, split, [], debts, NOW);
+    const by = Object.fromEntries(d.slices.map((s) => [s.key, s.amount]));
+
+    expect(d.requiredDebtPayments).toBe(500);
+    expect(d.requiredObligations).toBe(1500);
+    expect(d.discretionary).toBe(3500);
+
+    // Required group: fixed expenses + the required car-loan minimum.
+    expect(by.expenses).toBe(1000);
+    expect(by.requiredDebt).toBe(500);
+    // Discretionary debt paydown = 50% of 3500 → funds the revolving Visa only.
+    expect(by.debt).toBe(1750);
+    expect(by.fun).toBe(350); // 10% of 3500
+    expect(by.savings).toBe(1400); // 40% of 3500, no EF goal
+    // debtRepayment surfaces the whole debt outflow (required + discretionary).
+    expect(d.debtRepayment).toBe(2250);
+    expect(d.total).toBeCloseTo(5000, 6);
+
+    // Group tags line up with the required-vs-discretionary UI split.
+    const group = Object.fromEntries(d.slices.map((s) => [s.key, s.group]));
+    expect(group.expenses).toBe("required");
+    expect(group.requiredDebt).toBe("required");
+    expect(group.debt).toBe("discretionary");
+    expect(group.fun).toBe("discretionary");
+    expect(group.savings).toBe("discretionary");
+  });
+
+  it("computes savings from income minus required obligations, not as a peer of required debt", () => {
+    // Without the fix, discretionary would include the required debt and savings
+    // would be inflated. income 5000, bills 1000, required debt min 1000.
+    // discretionary = 5000 − 1000 − 1000 = 3000 → savings 40% = 1200.
+    const debts = [debt({ minimumPayment: 1000, totalBalance: 100000, isRequired: true })];
+    const d = computeDashboardAllocation(5000, 1000, split, [], debts, NOW);
+    const by = Object.fromEntries(d.slices.map((s) => [s.key, s.amount]));
+    expect(d.discretionary).toBe(3000);
+    expect(by.savings).toBe(1200);
+    expect(by.fun).toBe(300); // 10% of 3000
+  });
+
+  it("lets the total exceed income when required obligations outstrip it", () => {
+    // income 1000, no bills, a required debt whose minimum (1500) alone tops income.
+    const debts = [debt({ minimumPayment: 1500, totalBalance: 100000, isRequired: true })];
+    const d = computeDashboardAllocation(1000, 0, split, [], debts, NOW);
+    expect(d.requiredDebtPayments).toBe(1500);
+    expect(d.discretionary).toBe(0); // nothing left to allocate
+    expect(d.total).toBe(1500);
+    expect(d.total).toBeGreaterThan(d.income); // flags over-budget in the UI
+  });
+
+  it("keeps revolving debt in the discretionary group (unchanged behavior)", () => {
+    // A plain credit card (not isRequired) stays funded from discretionary.
+    const d = computeDashboardAllocation(5000, 1000, split, [], [debt()], NOW);
+    expect(d.requiredDebtPayments).toBe(0);
+    expect(d.requiredObligations).toBe(1000);
+    expect(d.discretionary).toBe(4000);
+    expect(d.slices.find((s) => s.key === "debt")!.group).toBe("discretionary");
+    expect(d.slices.find((s) => s.key === "debt")!.amount).toBe(2000);
+  });
 });
 
 describe("computeBalanceTrend", () => {

@@ -32,7 +32,16 @@ export default function Coaching() {
       const res = await getCoaching(snapshot);
       setItems(res.items);
     } catch (err) {
-      setError((err as Error).message);
+      // Firebase callable errors carry a `code` (e.g. "functions/internal");
+      // surface it so a bare "internal" isn't the only thing the user sees.
+      const e = err as { code?: string; message?: string };
+      const code = e.code?.replace(/^functions\//, "");
+      const msg = e.message && e.message !== code ? e.message : "";
+      setError(
+        code
+          ? `Coaching failed (${code})${msg ? `: ${msg}` : ""}. If this is a server key issue, check that GEMINI_API_KEY is set.`
+          : e.message ?? "Something went wrong."
+      );
     } finally {
       setLoading(false);
     }

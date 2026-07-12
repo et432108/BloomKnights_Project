@@ -110,6 +110,62 @@ export function payoffSummary(debts: Debt[]): PayoffSummary {
   };
 }
 
+/**
+ * Project debt-free progress `months` months into the future by simulating the
+ * monthly payment plan and applying each month's payments to progress (capped at
+ * each debt's balance) — exactly what `provisionThisMonth` does per month, just
+ * without persisting. Interest-agnostic, mirroring `payoffSummary`.
+ *
+ * The dashboard's debt indicator uses this so the Monthly / Annual tabs show the
+ * share of debt paid off by month-end / year-end, not the amount paid as of
+ * today. `months === 0` returns today's progress (identical to `payoffSummary`).
+ */
+export function projectedPayoffSummary(
+  debts: Debt[],
+  monthlyIncome: number,
+  debtTargetPercent: number,
+  fixedMonthlyBillsTotal: number,
+  months: number
+): PayoffSummary {
+  // Mutable copy of each debt's progress, capped at its balance up front.
+  const progress = new Map(
+    debts.map((d) => [d.id, Math.min(d.currentProgress, d.totalBalance)])
+  );
+
+  for (let m = 0; m < months; m += 1) {
+    const working = debts.map((d) => ({
+      ...d,
+      currentProgress: progress.get(d.id) ?? 0,
+    }));
+    const payments = computeMonthlyPayments(
+      working,
+      monthlyIncome,
+      debtTargetPercent,
+      fixedMonthlyBillsTotal
+    );
+    // No budget, or everything's paid off — further months add nothing.
+    if (payments.length === 0) break;
+    for (const p of payments) {
+      const debt = debts.find((d) => d.id === p.debtId);
+      if (!debt) continue;
+      const next = Math.min(
+        debt.totalBalance,
+        (progress.get(p.debtId) ?? 0) + p.amount
+      );
+      progress.set(p.debtId, next);
+    }
+  }
+
+  const totalOriginal = debts.reduce((s, d) => s + d.totalBalance, 0);
+  const totalPaid = debts.reduce((s, d) => s + (progress.get(d.id) ?? 0), 0);
+  return {
+    totalOriginal,
+    totalPaid,
+    remaining: Math.max(0, totalOriginal - totalPaid),
+    ratio: totalOriginal ? totalPaid / totalOriginal : 0,
+  };
+}
+
 /** Playful BloomKnights rank derived from overall debt-free progress. */
 export function knightRank(ratio: number): string {
   if (ratio >= 1) return "Debt-Free Legend";

@@ -9,6 +9,7 @@ import {
   payoffForDebt,
   payoffSummary,
   projectPayoff,
+  projectedPayoffSummary,
   remainingBalance,
 } from "@/lib/debt";
 import type { Debt } from "@/types";
@@ -112,6 +113,56 @@ describe("payoffSummary", () => {
     const s = payoffSummary([debt({ totalBalance: 500, currentProgress: 900 })]);
     expect(s.totalPaid).toBe(500); // capped at balance
     expect(s.ratio).toBe(1);
+  });
+});
+
+describe("projectedPayoffSummary", () => {
+  it("with 0 months matches today's payoffSummary", () => {
+    const debts = [
+      debt({ id: "a", totalBalance: 1000, currentProgress: 250 }),
+      debt({ id: "b", totalBalance: 3000, currentProgress: 750 }),
+    ];
+    const now = payoffSummary(debts);
+    const projected = projectedPayoffSummary(debts, 5000, 50, 0, 0);
+    expect(projected.totalPaid).toBe(now.totalPaid);
+    expect(projected.ratio).toBeCloseTo(now.ratio, 5);
+  });
+
+  it("advances progress by one month of planned payments (month-end)", () => {
+    // income 4000, 50% to debt => 2000 budget; single revolving debt.
+    const debts = [
+      debt({ id: "visa", totalBalance: 6000, interestRate: 22, minimumPayment: 100, currentProgress: 0 }),
+    ];
+    const s = projectedPayoffSummary(debts, 4000, 50, 0, 1);
+    // The whole 2000 budget waterfalls onto the one debt.
+    expect(s.totalPaid).toBe(2000);
+    expect(s.remaining).toBe(4000);
+    expect(s.ratio).toBeCloseTo(2000 / 6000, 5);
+  });
+
+  it("projects further over twelve months (year-end) than one", () => {
+    const debts = [
+      debt({ id: "visa", totalBalance: 6000, interestRate: 22, minimumPayment: 100, currentProgress: 0 }),
+    ];
+    const month = projectedPayoffSummary(debts, 4000, 50, 0, 1);
+    const year = projectedPayoffSummary(debts, 4000, 50, 0, 12);
+    expect(year.totalPaid).toBeGreaterThan(month.totalPaid);
+  });
+
+  it("never projects past full payoff (caps at each balance)", () => {
+    const debts = [
+      debt({ id: "visa", totalBalance: 1000, interestRate: 0, minimumPayment: 50, currentProgress: 0 }),
+    ];
+    // Huge budget would overpay, but progress caps at the 1000 balance.
+    const s = projectedPayoffSummary(debts, 10000, 100, 0, 12);
+    expect(s.totalPaid).toBe(1000);
+    expect(s.ratio).toBe(1);
+  });
+
+  it("stays flat when there's no debt budget", () => {
+    const debts = [debt({ id: "visa", totalBalance: 1000, currentProgress: 100 })];
+    const s = projectedPayoffSummary(debts, 0, 50, 0, 12);
+    expect(s.totalPaid).toBe(100);
   });
 });
 
